@@ -102,6 +102,10 @@ public:
         curr_instruction.type = opcode;
 
         std::cout << itype_to_string(opcode) << std::endl;
+
+        EXACT_INSTRUCTION exact_instruction = decompose_IRR(instruction_val);
+
+        std::cout << exact_instruction_to_string(exact_instruction) << std::endl;
     }
 
     
