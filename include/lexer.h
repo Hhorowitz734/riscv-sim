@@ -32,50 +32,50 @@ public:
     }
 
 
-    Dword consume_instruction() {
-        /*
-        * Reads next byte
-        */
+Dword consume_instruction() {
+    /*
+    * Reads next byte
+    */
 
-        // Skip newline characters
-        char nextChar = inputFile.peek();
-        while (nextChar == '\n' || nextChar == ' ') {
-            inputFile.seekg(1, std::ios::cur);
-            bytesConsumed++;
-            nextChar = inputFile.peek();
-        }
-
-        // Handle case that no bytes remain
-        if (fileSize - bytesConsumed < 32) {
-            std::cerr << "No bytes left to read!" << std::endl; 
-            return 0;
-        }
-
-        // Buffer to read in byte
-        char buff[32];
-
-        // Consume and update counter
-        inputFile.read(buff, 32);
-        bytesConsumed += 32;
-
-        // Convert string buffer to 32-bit instruction
-        Dword instruction = 0;
-
-        for (int i = 0; i < 32; i++) {
-            switch (buff[i]) {
-                case '0':
-                    instruction = instruction << 1;
-                    break;
-                case '1':
-                    instruction = (instruction << 1) | 0x1;
-                    break;
-                default:
-                    std::cerr << "Faulty byte found in text: " << buff[i] << std::endl;
-            }
-        }
-
-        return instruction;
+    // Skip newline characters
+    char nextChar = inputFile.peek();
+    while (nextChar == '\n' || nextChar == ' ') {
+        inputFile.seekg(1, std::ios::cur);  // Moves the cursor one character forward
+        bytesConsumed++;
+        nextChar = inputFile.peek();  // Update peek to the next character
     }
+
+    // Handle case that no bytes remain
+    if (fileSize - bytesConsumed < 32) {
+        std::cerr << "No bytes left to read!" << std::endl; 
+        exit(0);
+    }
+
+    // Buffer to read in byte
+    char buff[32];  // Assumes the buffer contains a binary representation of the instruction
+
+    // Consume and update counter
+    inputFile.read(buff, 32);  // Read the next 32 characters
+    bytesConsumed += 32;
+
+    // Convert string buffer to 32-bit instruction
+    Dword instruction = 0;
+
+    for (int i = 0; i < 32; i++) {
+        switch (buff[i]) {
+            case '0':
+                instruction = instruction << 1;  // Shift and add 0
+                break;
+            case '1':
+                instruction = (instruction << 1) | 0x1;  // Shift and add 1
+                break;
+            default:
+                std::cerr << "Faulty byte found in text: " << buff[i] << std::endl;
+        }
+    }
+
+    return instruction;
+}
 
     void reset_instruction() {
         /*
@@ -101,11 +101,12 @@ public:
         INST_TYPE opcode = read_opcode(instruction_val);
         curr_instruction.type = opcode;
 
-        std::cout << itype_to_string(opcode) << std::endl;
+        //std::cout << "Instruction type: " << itype_to_string(opcode) << std::endl;
 
-        EXACT_INSTRUCTION exact_instruction = decompose_IRR(instruction_val);
+        EXACT_INSTRUCTION exact_instruction = decompose_types(instruction_val, opcode);
 
-        std::cout << exact_instruction_to_string(exact_instruction) << std::endl;
+        std::cout << "Exact instruction: " << exact_instruction_to_string(exact_instruction) << std::endl;
+
     }
 
     

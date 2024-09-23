@@ -31,6 +31,6 @@ int main(int argc, char* argv[]) {
 
     std::cout << "File size: " << static_cast<int>(lexer->getFileSize()) << std::endl;
     
-    lexer->read_next_instruction();
+    for (int i = 0; i < 17; i++) { lexer->read_next_instruction(); }
     return 0;
 }	
