@@ -2,6 +2,7 @@
 #define INSTRUCTION_H
 
 #include <string>
+#include <bitset>
 
 // Extra datatypes
 typedef bool Bit;
@@ -11,72 +12,45 @@ typedef uint32_t Dword;
 
 
 // ENUM FOR INSTRUCTION TYPES
-enum I_TYPE {
+enum INST_TYPE {
     JAL = 0x6F,
-    JALR,
-    BEQ,
-    BNE,
-    BGE,
-    BLT,
-    ADDI,
-    RET,
-    SLT,
-    SW,
-    LW,
-    SLL,
-    SRL,
-    SUB,
-    ADD,
-    AND,
-    OR,
-    XOR,
-    SLTI,
-    ERROR_TYPE
+    JALR = 0x67,
+    IRR = 0x33, // Integer register register
+    STORE = 0x23,
+    LOAD = 0x03,
+    OTHER = 0xFF
 };
 
 struct Instruction {
     Dword value;
-    I_TYPE type;
+    INST_TYPE type;
 };
 
 
-std::string itype_to_string(I_TYPE instructionType) {
-    /*
-    * Converts instruction type to string 
+std::string itype_to_string(INST_TYPE instructionType) {
+     /*
+    * Converts instruction type (categories) to string
     */
     switch (instructionType) {
-        case JAL:   return "JAL";
-        case JALR:  return "JALR";
-        case BEQ:   return "BEQ";
-        case BNE:   return "BNE";
-        case BGE:   return "BGE";
-        case BLT:   return "BLT";
-        case ADDI:  return "ADDI";
-        case RET:   return "RET";
-        case SLT:   return "SLT";
-        case SW:    return "SW";
-        case LW:    return "LW";
-        case SLL:   return "SLL";
-        case SRL:   return "SRL";
-        case SUB:   return "SUB";
-        case ADD:   return "ADD";
-        case AND:   return "AND";
-        case OR:    return "OR";
-        case XOR:   return "XOR";
-        case SLTI:  return "SLTI";
-        case ERROR_TYPE: return "ERROR_TYPE";
-        default:    return "UNKNOWN";
+        case JAL: return "JAL";
+        case JALR: return "JALR";
+        case IRR: return "IRR";
+        case STORE: return "STORE";
+        case LOAD: return "LOAD";
+        default:     return "UNKNOWN_TYPE";
     }
 }
 
-I_TYPE read_opcode(Dword instruction) {
+INST_TYPE read_opcode(Dword instruction) {
     /*
     * Uses a mask to isolate opcode byte, returns the type
     */
     
-    Byte opcode_byte = instruction & 0x7F;
+    Byte opcode_byte = (instruction & 0x0000007F);
 
-    return static_cast<I_TYPE>(opcode_byte);
+    std::cout << std::bitset<8>(opcode_byte) << std::endl;
+
+    return static_cast<INST_TYPE>(opcode_byte);
 }
 
 #endif

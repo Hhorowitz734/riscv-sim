@@ -83,7 +83,7 @@ public:
         */
 
         // Create new instruction with default values
-        curr_instruction.type = ERROR_TYPE;
+        curr_instruction.type = OTHER;
         curr_instruction.value = 0;
 
     }
@@ -98,7 +98,7 @@ public:
         curr_instruction.value = instruction_val;
 
         // Get opcode
-        I_TYPE opcode = read_opcode(instruction_val);
+        INST_TYPE opcode = read_opcode(instruction_val);
         curr_instruction.type = opcode;
 
         std::cout << itype_to_string(opcode) << std::endl;
