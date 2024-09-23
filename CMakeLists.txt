@@ -11,6 +11,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 # Add source files (you can list them individually or use GLOB)
 set(SOURCE_FILES
     ../main.cpp
+    ../src/instruction.cpp
+    ../src/lexer.cpp
 )
 
 # Include directories for headers
