@@ -1,7 +1,7 @@
 #include "../include/lexer.h"
 
 
-void Lexer::open_file(char* filename) {
+void Lexer::set_input_file(const char* filename) {
     /*
     * Attempts to open useor provided filename
     */
@@ -20,22 +20,59 @@ void Lexer::open_file(char* filename) {
 
 }
 
+void Lexer::set_output_file(const char* filename) {
+    /*
+    * Attempts to open filename for writing
+    */
+
+    // Open the file in output mode
+    outputFile.open(filename, std::ios::out | std::ios::trunc);  // std::ios::trunc overwrites if the file exists
+
+    // Handle file open failed
+    if (!outputFile.is_open()) {
+        std::cerr << "Error: Output file [" << filename << "] could not be opened." << std::endl;
+        return;
+    }
+
+    std::cout << "Output file [" << filename << "] successfully opened." << std::endl;
+}
+
+void Lexer::write_output(std::string output) {
+    /*
+    * Writes a string to output file, or throws an error
+    */
+
+   if (outputFile.is_open()) {
+        outputFile << output << std::endl;
+    } else {
+        std::cerr << "Could not open output file!" << std::endl;
+        exit(1);
+    }
+}
+
+// Self explanatory, tells us if we've reached end
+bool Lexer::isEOF() { return inputFile.eof(); }
+
+
 
 Dword Lexer::consume_instruction() {
     /*
     * Reads next byte
     */
 
+    // Even if "instruction" is all 0s, we should consume it
+    instructions_consumed++;
+
     // Skip newline characters
     char nextChar = inputFile.peek();
     while (nextChar == '\n' || nextChar == ' ') {
         inputFile.seekg(1, std::ios::cur);  // Moves the cursor one character forward
-        bytesConsumed++;
+        bitsConsumed++;
         nextChar = inputFile.peek();  // Update peek to the next character
     }
 
     // Handle case that no bytes remain
-    if (fileSize - bytesConsumed < 32) {
+    if (fileSize - bitsConsumed < 32) {
         std::cerr << "No bytes left to read!" << std::endl; 
         exit(0);
     }
@@ -45,7 +82,7 @@ Dword Lexer::consume_instruction() {
 
     // Consume and update counter
     inputFile.read(buff, 32);  // Read the next 32 characters
-    bytesConsumed += 32;
+    bitsConsumed += 32;
 
     // Convert string buffer to 32-bit instruction
     Dword instruction = 0;
@@ -59,7 +96,8 @@ Dword Lexer::consume_instruction() {
                 instruction = (instruction << 1) | 0x1;  // Shift and add 1
                 break;
             default:
-                std::cerr << "Faulty byte found in text: " << buff[i] << std::endl;
+                //std::cerr << "Faulty bit found in text: " << buff[i] << std::endl;
+                break;
         }
     }
 
@@ -80,6 +118,9 @@ void Lexer::reset_instruction() {
 
 void Lexer::read_next_instruction() { 
 
+    // Give default value for output
+    std::string output = "";
+
     // Reset
     reset_instruction();
 
@@ -91,13 +132,32 @@ void Lexer::read_next_instruction() {
     INST_TYPE opcode = read_opcode(instruction_val);
     curr_instruction.type = opcode;
 
+    // Check if instruction is blank, then print it if it is
+    if (opcode == BLANK) {
+        output = instruction_to_string(curr_instruction, start_position + (instructions_consumed * 4) - 4, true);
+        write_output(output);
+        return;
+    }
+
     //std::cout << "Instruction type: " << itype_to_string(opcode) << std::endl;
 
+    // Retrieve the exact instruction
     EXACT_INSTRUCTION exact_instruction = decompose_types(instruction_val, opcode);
-
-    std::cout << "Exact instruction: " << exact_instruction_to_string(exact_instruction) << std::endl;
-
     curr_instruction.instruction = exact_instruction;
+
+    //std::cout << "Exact instruction: " << exact_instruction_to_string(exact_instruction) << std::endl;
+
+    // Find fields as necessary
+    Instruction dummy_populated_instruction = get_populated_instruction(instruction_val, opcode);
+    curr_instruction.rs1 = dummy_populated_instruction.rs1;
+    curr_instruction.rs2 = dummy_populated_instruction.rs2;
+    curr_instruction.rd = dummy_populated_instruction.rd;
+    curr_instruction.imm = dummy_populated_instruction.imm;
+
+    // Get instruction as string and write it out
+    output = instruction_to_string(curr_instruction, start_position + (instructions_consumed * 4) - 4, false);
+    write_output(output);
+    
 
 }
 

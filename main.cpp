@@ -26,11 +26,14 @@ int main(int argc, char* argv[]) {
     Lexer* lexer = new Lexer();
 
 
-    lexer->open_file(const_cast<char*>(inputfile.c_str()));
-
+    lexer->set_input_file(const_cast<char*>(inputfile.c_str()));
+    lexer->set_output_file(const_cast<char*>(outputfile.c_str()));
 
     std::cout << "File size: " << static_cast<int>(lexer->getFileSize()) << std::endl;
     
-    for (int i = 0; i < 17; i++) { lexer->read_next_instruction(); }
+    while (!lexer->isEOF()) {
+        lexer->read_next_instruction();
+    }
+
     return 0;
 }	

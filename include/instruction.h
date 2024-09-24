@@ -1,8 +1,12 @@
 #ifndef INSTRUCTION_H
 #define INSTRUCTION_H
 
+// Standard library string manip
 #include <string>
-#include <bitset>
+#include <bitset> // For binary printing
+#include <iostream>
+#include <sstream>
+#include <iomanip>
 
 // Extra datatypes
 typedef bool Bit;
@@ -13,6 +17,7 @@ typedef uint32_t Dword;
 
 // ENUM FOR INSTRUCTION TYPES [BY OPCODE, NOT EXACT]
 enum INST_TYPE {
+    BLANK = 0x0,
     JAL = 0x6F,
     JALR = 0x67,
     IRR = 0x33, // Integer register register
@@ -62,10 +67,10 @@ struct Instruction {
     INST_TYPE type;
     EXACT_INSTRUCTION instruction;
 
-    Dword rs1;
-    Dword rs2;
-    Dword rd;
-    int32_t imm;
+    Dword rs1; // Source register 1
+    Dword rs2; // Source register 2
+    Dword rd; // Destination register
+    int32_t imm; // Immediate value
 
 };
 
@@ -78,6 +83,7 @@ std::string itype_to_string(INST_TYPE instructionType);
 // HANDLING OPCODE
 INST_TYPE read_opcode(Dword instruction);
 
+
 // HELPER FUNCTIONS FOR BREAKING UP INSTRUCTION
 Byte get_funct7(Dword instruction);
 Byte get_rs2(Dword instruction);
@@ -85,7 +91,10 @@ Byte get_rs1(Dword instruction);
 Byte get_funct3(Dword instruction);
 Byte get_rd(Dword instruction);
 Byte get_opcode(Dword instruction);
-Byte get_immediate(Dword instruction);
+Dword get_i_type_imm(Dword instruction);
+Dword get_s_type_imm(Dword instruction);
+Dword get_b_type_imm(Dword instruction);
+Dword get_j_type_imm(Dword instruction);
 
 
 // GET EXACT INSTRUCTIONS
@@ -95,6 +104,15 @@ EXACT_INSTRUCTION decompose_I_TYPE(Dword instruction);
 EXACT_INSTRUCTION decompose_BRANCH(Dword instruction);
 EXACT_INSTRUCTION decompose_types(Dword instruction, INST_TYPE type);
 
+
+// POPULATE VALUES FOR YOUR INSTRUCTION
+Instruction get_populated_instruction(Dword instruction, INST_TYPE type);
+
+
+// INSTRUCTION -> STRING, AS IN EXAMPLE
+std::string register_to_string(Dword reg);
+std::string to_binary_string(Dword value, int bits);
+std::string instruction_to_string(Instruction inst, int position, bool isBlank);
 
 
 #endif

@@ -13,7 +13,10 @@ class Lexer {
 public:
 
     // Utility functions
-    void open_file(char* filename);
+    void set_input_file(const char* filename);
+    void set_output_file(const char* filename);
+    void write_output(std::string output);
+    bool isEOF(); 
 
     // Reading instructions
     Dword consume_instruction(); // Main logic for reading an instruction through (handles reader aspect)
@@ -27,11 +30,15 @@ public:
 private:
 
     std::ifstream inputFile;
+    std::ofstream outputFile;
 
     std::size_t fileSize; //Byte size of file
-    std::size_t bytesConsumed = 0;
+    std::size_t bitsConsumed = 0;
+    int instructions_consumed = 0;
 
     Instruction curr_instruction;
+
+    const int start_position = 496;
 
 };
 
