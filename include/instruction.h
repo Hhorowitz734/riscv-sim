@@ -66,7 +66,7 @@ struct Instruction {
     Dword rs2;
     Dword rd;
     int32_t imm;
-    
+
 };
 
 
@@ -77,6 +77,15 @@ std::string itype_to_string(INST_TYPE instructionType);
 
 // HANDLING OPCODE
 INST_TYPE read_opcode(Dword instruction);
+
+// HELPER FUNCTIONS FOR BREAKING UP INSTRUCTION
+Byte get_funct7(Dword instruction);
+Byte get_rs2(Dword instruction);
+Byte get_rs1(Dword instruction);
+Byte get_funct3(Dword instruction);
+Byte get_rd(Dword instruction);
+Byte get_opcode(Dword instruction);
+Byte get_immediate(Dword instruction);
 
 
 // GET EXACT INSTRUCTIONS
