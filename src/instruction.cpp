@@ -116,7 +116,7 @@ int32_t get_jal_imm(Dword instruction) {
     imm |= ((instruction >> 31) & 0x1) << 20; // imm[20]
     imm |= ((instruction >> 21) & 0x3FF) << 1; // imm[10:1]
     imm |= ((instruction >> 20) & 0x1) << 11; // imm[11]
-    imm |= ((instruction >> 12) & 0xFF) << 12; // imm[19:12]
+   imm |= ((instruction >> 12) & 0xFF) << 12; // imm[19:12]
 
     // Sign extend
     if (imm & 0x100000) {
@@ -125,7 +125,7 @@ int32_t get_jal_imm(Dword instruction) {
 
     //imm >>= 11;
 
-    //std::cout << std::bitset<21>(imm) << std::endl;
+    //std::cout << std::bitset<20>(imm) << std::endl;
     //std::cout << imm << std::endl;
 
     return imm;
@@ -143,7 +143,7 @@ int32_t get_s_type_imm(Dword instruction) {
     // First we extract AND SHIFT 31-25
     imm |= (instruction >> 25) & 0x7F;  // Extract 31-25
 
-    // Then you need to make room for the lower part (11-7)
+    // Then make room for lower
     imm <<= 5;                
 
     // Extract 11-7
@@ -151,7 +151,7 @@ int32_t get_s_type_imm(Dword instruction) {
 
     // Sign extend
     if (imm & 0x800) {  
-        imm |= 0xFFFFF000;  // Sign extend to 32 bits
+        imm |= 0xFFFFF000; 
     }
 
     return imm;
@@ -168,7 +168,7 @@ int32_t get_b_type_imm(Dword instruction) {
 
     // Sign extend 
     if (imm & (1 << 11)) { 
-        imm |= 0xFFFFF800; // Fill upper bits based on bit 11
+        imm |= 0xFFFFF800;
     }
 
     // For debugging
@@ -204,7 +204,7 @@ int32_t get_jalr_imm(Dword instruction) {
 // GET EXACT INSTRUCTIONS
 EXACT_INSTRUCTION decompose_IRR(Dword instruction) {
     
-    // First, we can check bits funct3 to distinguish R-Type instructions
+    // Check funct3
     Byte funct3 = get_funct3(instruction);
 
     //std::cout << "Bytes 14-12: " << std::bitset<3>(distinguishing_bits) << std::endl;
