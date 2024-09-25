@@ -129,19 +129,21 @@ int32_t get_s_type_imm(Dword instruction) {
 int32_t get_b_type_imm(Dword instruction) {
     int32_t imm = 0;
 
-    imm |= ((instruction >> 31) & 0x1) << 12;     // Extract sign bit
-    imm |= ((instruction >> 25) & 0x3F) << 5;     // Extract bits 0-5
-    imm |= ((instruction >> 8) & 0xF) << 1;       // Extract bits 4-1
-    imm |= ((instruction >> 7) & 0x1) << 11;      // Extract bit 11
+    // Extract immediate
+    imm |= ((instruction >> 25) & 0x7F) << 5;  // Extract bits 31-25 
+    imm |= ((instruction >> 7) & 0x1F) << 0;   // Extract bits 11-7
 
-
-    // Sign extend
-    if (imm & 0x1000) {  
-        imm |= 0xFFFFE000;
+    // Sign extend 
+    if (imm & (1 << 11)) { 
+        imm |= 0xFFFFF800; // Fill upper bits based on bit 11
     }
+
+    // For debugging
+    //std::cout << std::bitset<16>(imm) << std::endl;
 
     return imm;
 }
+
 
 
 
@@ -302,8 +304,12 @@ Instruction get_populated_instruction(Dword instruction, INST_TYPE type) {
     // Create variable to hold instruction
     Instruction dummy;
     
-    // Store the instruction's raw value
+    // Give initialized values
     dummy.value = instruction;
+    dummy.rs1 = 0;
+    dummy.rs2 = 0;
+    dummy.rd = 0;
+    dummy.imm = 0;
 
     // Determine which values are needed based on the instruction type
     switch (type) {
@@ -432,6 +438,7 @@ std::string instruction_to_string(Instruction inst, int position, bool isBlank) 
         case BRANCH:  // B-Type
             ss << register_to_string(inst.rs1) << ", "
                << register_to_string(inst.rs2) << ", "
+               //<< std::bitset<30>(inst.imm);
                << inst.imm;
             break;
         case JAL:  // J-Type (JAL)

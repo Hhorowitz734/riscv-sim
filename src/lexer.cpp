@@ -65,7 +65,7 @@ Dword Lexer::consume_instruction() {
 
     // Skip newline characters
     char nextChar = inputFile.peek();
-    while (nextChar == '\n' || nextChar == ' ') {
+    while (nextChar == '\n' || nextChar == ' ' || nextChar == '\t') {
         inputFile.seekg(1, std::ios::cur);  // Moves the cursor one character forward
         bitsConsumed++;
         nextChar = inputFile.peek();  // Update peek to the next character
@@ -161,10 +161,11 @@ void Lexer::read_next_instruction() {
         return;
     }
 
+    //std::cout << exact_instruction_to_string(exact_instruction) << std::endl; 
     // Get instruction as string and write it out
     output = instruction_to_string(curr_instruction, start_position + (instructions_consumed * 4) - 4, false);
     write_output(output);
-    
+
 
 }
 
