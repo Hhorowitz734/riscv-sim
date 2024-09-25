@@ -154,6 +154,13 @@ void Lexer::read_next_instruction() {
     curr_instruction.rd = dummy_populated_instruction.rd;
     curr_instruction.imm = dummy_populated_instruction.imm;
 
+    // Handle special cases RET, NOP, J
+    if (exact_instruction == RET || exact_instruction == NOP || exact_instruction == J) {
+        output = handle_special_case(curr_instruction, exact_instruction, start_position + (instructions_consumed * 4) - 4);
+        write_output(output);
+        return;
+    }
+
     // Get instruction as string and write it out
     output = instruction_to_string(curr_instruction, start_position + (instructions_consumed * 4) - 4, false);
     write_output(output);

@@ -4,6 +4,7 @@
 std::string exact_instruction_to_string(EXACT_INSTRUCTION instruction) {
     switch (instruction) {
         case JAL_E: return "JAL";
+        case J: return "J";
         case JALR_E: return "JALR";
         case RET: return "RET";
         case SW: return "SW";
@@ -17,6 +18,7 @@ std::string exact_instruction_to_string(EXACT_INSTRUCTION instruction) {
         case OR: return "OR";
         case XOR: return "XOR";
         case ADDI: return "ADDI";
+        case NOP: return "NOP";
         case SLTI: return "SLTI";
         case BEQ: return "BEQ";
         case BNE: return "BNE";
@@ -76,9 +78,14 @@ Byte get_opcode(Dword instruction) { return (instruction & 0x7F); }
 /*
 * Different instruction types have different immediate formats
 * These helper functions extract the immediate correctly by type
+*
+*
+* First I get the relevant bits
+* Then, I need to sign preserve, as these are signed values but I'm extracting them to use as standalone
+* Therefore, preserving the sign bit is crucial here so that no meaning is lost.
 */
-Dword get_i_type_imm(Dword instruction) {
-    Dword imm = (instruction >> 20) & 0xFFF; 
+int32_t get_i_type_imm(Dword instruction) {
+    int32_t imm = (instruction >> 20) & 0xFFF; 
     
     // Sign extend
     if (imm & 0x800) {
@@ -88,8 +95,8 @@ Dword get_i_type_imm(Dword instruction) {
     return imm;
 }
 
-Dword get_s_type_imm(Dword instruction) {
-    Dword imm = 0;
+int32_t get_s_type_imm(Dword instruction) {
+    int32_t imm = 0;
     
     imm |= (instruction >> 25) & 0x7F;  // Extract bits 31-25
     imm |= (instruction >> 7) & 0x1F;   // Extract bits 11-7
@@ -102,8 +109,8 @@ Dword get_s_type_imm(Dword instruction) {
     return imm;
 }
 
-Dword get_b_type_imm(Dword instruction) {
-    Dword imm = 0;
+int32_t get_b_type_imm(Dword instruction) {
+    int32_t imm = 0;
 
     imm |= (instruction >> 31) & 0x1 << 12;     // Extract sign bit
     imm |= (instruction >> 25) & 0x3F << 5;     // Extract bits 10-5
@@ -118,17 +125,21 @@ Dword get_b_type_imm(Dword instruction) {
     return imm;
 }
 
-Dword get_j_type_imm(Dword instruction) {
-    Dword imm = 0;
+int32_t get_j_type_imm(Dword instruction) {
 
-    imm |= (instruction >> 31) & 0x1 << 20;     // Bit 20 
-    imm |= (instruction >> 12) & 0xFF << 12;    // Bits 19-12
-    imm |= (instruction >> 20) & 0x1 << 11;   // Bit 11
-    imm |= (instruction >> 21) & 0x3FF << 1;    // Bits 10-1
+    int32_t imm = 0;
+
+    /*
+    * I won't comment on the bit operations here, as I'm using the same principle
+    * As in the other immediate extraction functions
+    */
+    imm |= ((instruction >> 31) & 0x1) << 20; 
+    imm |= ((instruction >> 12) & 0xFF) << 12;
+    imm |= ((instruction >> 20) & 0x1) << 11;
+    imm |= ((instruction >> 21) & 0x3FF) << 1;
     
-    // Sign-extend the immediate
     if (imm & 0x100000) {
-        imm |= 0xFFE00000;  // Sign-extend to 32 bits
+        imm |= 0xFFE00000;
     }
     
     return imm;
@@ -161,11 +172,11 @@ EXACT_INSTRUCTION decompose_IRR(Dword instruction) {
     //std::cout << "Bytes 27-32: " << std::bitset<5>(distinguishing_bits) << std::endl;
 
     switch (funct7) {
-        case 0: return ADD;
+        case 0: return ADD; // Need to check ADD or NOP
         case 8: return SUB;
         default: return ERROR_EXACT_INSTRUCTION;
     }
-    
+
     return ERROR_EXACT_INSTRUCTION;
 }
 
@@ -197,12 +208,19 @@ EXACT_INSTRUCTION decompose_I_TYPE(Dword instruction) {
     Byte funct3 = get_funct3(instruction);
 
     switch (funct3) {
-        case 0: return ADDI;
+        case 0: break;
         case 2: return SLTI;
-        default: break;
+        default: return ERROR_EXACT_INSTRUCTION;
     }
 
-    return ERROR_EXACT_INSTRUCTION;
+    // We break out here because we need to check the special case of ADDI (NOP)
+    Byte rd = get_rd(instruction);
+    Byte rs1 = get_rs1(instruction);
+    Dword immediate = get_i_type_imm(instruction);
+
+    if (rd == 0 && rs1 == 0 && immediate == 0) { return NOP; }
+
+    return ADDI;
 
 }
 
@@ -225,6 +243,19 @@ EXACT_INSTRUCTION decompose_BRANCH(Dword instruction) {
     return ERROR_EXACT_INSTRUCTION;
 }
 
+EXACT_INSTRUCTION decompose_JAL_J(Dword instruction) {
+    /*
+    * Decomposes the special case JAL and J
+    */
+
+   Byte rd = get_rd(instruction);
+
+   if (rd == 0) { return J; }
+   
+   return JAL_E;
+
+}
+
 EXACT_INSTRUCTION decompose_types(Dword instruction, INST_TYPE type) {
     /*
     * Takes in an instruction type and the uint32 containing it, decomposes the type given by the opcode
@@ -234,8 +265,8 @@ EXACT_INSTRUCTION decompose_types(Dword instruction, INST_TYPE type) {
    switch (type) {
         case IRR: return decompose_IRR(instruction);
         case JALR: return decompose_JALR(instruction);
-        case JAL: return JAL_E; // For these, we know that the only possible opcode is given here
-        case STORE: return SW;
+        case JAL: return decompose_JAL_J(instruction);
+        case STORE: return SW;  // For these, we know that the only possible opcode is given here
         case LOAD: return LW;
         case I_TYPE: return decompose_I_TYPE(instruction);
         case BRANCH: return decompose_BRANCH(instruction);
@@ -245,6 +276,7 @@ EXACT_INSTRUCTION decompose_types(Dword instruction, INST_TYPE type) {
 
 
 
+// POPULATE THE VALUES (REGISTERS) FOR YOUR INSTRUCTION
 Instruction get_populated_instruction(Dword instruction, INST_TYPE type) {
     
     // Create variable to hold instruction
@@ -297,7 +329,8 @@ Instruction get_populated_instruction(Dword instruction, INST_TYPE type) {
 }
 
 
-// PRINTING FUNCTIONS
+
+// PRINTING HELPER FUNCTIONS
 std::string register_to_string(Dword reg) {
     /*
     * Register to string (prepend x)
@@ -388,4 +421,48 @@ std::string instruction_to_string(Instruction inst, int position, bool isBlank) 
     }
 
     return ss.str();
+}
+
+std::string handle_special_case(Instruction inst, EXACT_INSTRUCTION type, int position) {
+    /*
+    * We need a helper function to handle the special cases that can arise from our custom instructions
+    * These being J, NOP, and RET
+    */
+
+    std::ostringstream ss;
+
+    // First, split into parts the same way as normal
+    std::string binary_str = to_binary_string(inst.value, 32);
+
+    ss << binary_str.substr(0, 6) << " " << binary_str.substr(6, 6) << " "
+       << binary_str.substr(12, 5) << " " << binary_str.substr(17, 3) << " "
+       << binary_str.substr(20, 5) << " " << binary_str.substr(25, 7);
+
+    // I realize the above could be its own function, but this is done for simplicity's sake
+    // For such an important assignment, I want to avoid using memory allocation as this exposes me to potential segfaults
+
+    // Append the position
+    ss << "\t" << position;
+
+
+
+    switch (type) {
+        case J: 
+            ss << "\tJ\t#" << (position + inst.imm); // Address relative to position
+            ss << "\t//JAL x0, " << inst.imm; // Comment for J
+            break;
+        case NOP:
+            ss << "\tNOP";
+            ss << "\t\t//ADDI x0, x0, 0";
+            break;
+        case RET:
+            ss << "\tRET";
+            ss << "\t\t//JALR x0, x1, 0";
+            break;
+        default:
+            ss << "ERROR"; // An instruction that isn't of one of these types should never even be passed to this function
+    }
+
+    return ss.str();
+
 }

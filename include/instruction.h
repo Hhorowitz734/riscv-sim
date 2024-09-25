@@ -32,6 +32,7 @@ enum INST_TYPE {
 // ENUM FOR EXACT INSTRUCTIONS
 enum EXACT_INSTRUCTION {
     JAL_E,
+    J,
     JALR_E,
     RET,
     SW,
@@ -43,6 +44,7 @@ enum EXACT_INSTRUCTION {
     SRL,
     SUB,
     ADD,
+    NOP,
     AND,
     OR,
     XOR,
@@ -91,10 +93,10 @@ Byte get_rs1(Dword instruction);
 Byte get_funct3(Dword instruction);
 Byte get_rd(Dword instruction);
 Byte get_opcode(Dword instruction);
-Dword get_i_type_imm(Dword instruction);
-Dword get_s_type_imm(Dword instruction);
-Dword get_b_type_imm(Dword instruction);
-Dword get_j_type_imm(Dword instruction);
+int32_t get_i_type_imm(Dword instruction);
+int32_t get_s_type_imm(Dword instruction);
+int32_t get_b_type_imm(Dword instruction);
+int32_t get_j_type_imm(Dword instruction);
 
 
 // GET EXACT INSTRUCTIONS
@@ -102,6 +104,7 @@ EXACT_INSTRUCTION decompose_IRR(Dword instruction);
 EXACT_INSTRUCTION decompose_JALR(Dword instruction);
 EXACT_INSTRUCTION decompose_I_TYPE(Dword instruction);
 EXACT_INSTRUCTION decompose_BRANCH(Dword instruction);
+EXACT_INSTRUCTION decompose_JAL_J(Dword instruction);
 EXACT_INSTRUCTION decompose_types(Dword instruction, INST_TYPE type);
 
 
@@ -113,6 +116,7 @@ Instruction get_populated_instruction(Dword instruction, INST_TYPE type);
 std::string register_to_string(Dword reg);
 std::string to_binary_string(Dword value, int bits);
 std::string instruction_to_string(Instruction inst, int position, bool isBlank);
+std::string handle_special_case(Instruction inst, EXACT_INSTRUCTION type, int position);
 
 
 #endif
