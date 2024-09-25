@@ -34,7 +34,7 @@ void Lexer::set_output_file(const char* filename) {
         return;
     }
 
-    std::cout << "Output file [" << filename << "] successfully opened." << std::endl;
+    //std::cout << "Output file [" << filename << "] successfully opened." << std::endl;
 }
 
 void Lexer::write_output(std::string output) {
