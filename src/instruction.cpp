@@ -2,6 +2,10 @@
 
 // TO STRING FUNCTIONS
 std::string exact_instruction_to_string(EXACT_INSTRUCTION instruction) {
+    /**
+     * Converts exact instruction to string
+     * Helper method for writing, also great for testing
+     */
     switch (instruction) {
         case JAL_E: return "JAL";
         case J: return "J";
@@ -125,18 +129,21 @@ int32_t get_s_type_imm(Dword instruction) {
 int32_t get_b_type_imm(Dword instruction) {
     int32_t imm = 0;
 
-    imm |= (instruction >> 31) & 0x1 << 12;     // Extract sign bit
-    imm |= (instruction >> 25) & 0x3F << 5;     // Extract bits 10-5
-    imm |= (instruction >> 8) & 0xF << 1;       // Extract bits 4-1
-    imm |= (instruction >> 7) & 0x1 << 11;      // Bit 11
-    
+    imm |= ((instruction >> 31) & 0x1) << 12;     // Extract sign bit
+    imm |= ((instruction >> 25) & 0x3F) << 5;     // Extract bits 0-5
+    imm |= ((instruction >> 8) & 0xF) << 1;       // Extract bits 4-1
+    imm |= ((instruction >> 7) & 0x1) << 11;      // Extract bit 11
+
+
     // Sign extend
-    if (imm & 0x1000) {
-        imm |= 0xFFFFE000;  
+    if (imm & 0x1000) {  
+        imm |= 0xFFFFE000;
     }
-    
+
     return imm;
 }
+
+
 
 int32_t get_j_type_imm(Dword instruction) {
 
@@ -344,7 +351,7 @@ Instruction get_populated_instruction(Dword instruction, INST_TYPE type) {
 
 
 // PRINTING HELPER FUNCTIONS
-std::string register_to_string(Dword reg) {
+std::string register_to_string(Byte reg) {
     /*
     * Register to string (prepend x)
     */
@@ -396,10 +403,10 @@ std::string instruction_to_string(Instruction inst, int position, bool isBlank) 
     /**
      * This stuff is really not super useful. I just want to make the "diff" match since that's how grading is done.
      */
-    
+
     // Spacing adjustment
     std::string mnemonic = exact_instruction_to_string(inst.instruction);
-    int padding = 7 - mnemonic.length(); // Padding adjustment
+    int padding = 6 - mnemonic.length(); // Padding adjustment
     ss << std::string(padding, ' ');
 
     // Params
@@ -471,7 +478,7 @@ std::string handle_special_case(Instruction inst, EXACT_INSTRUCTION type, int po
     switch (type) {
         case J: 
             ss << "\tJ\t#" << (position + inst.imm); // Address relative to position
-            ss << "\t//JAL x0, " << inst.imm; // Comment for J
+            ss << "  //JAL x0, " << inst.imm; // Comment for J
             break;
         case NOP:
             ss << "\tNOP";

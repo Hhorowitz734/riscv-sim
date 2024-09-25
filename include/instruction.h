@@ -95,7 +95,7 @@ Byte get_rd(Dword instruction);
 Byte get_opcode(Dword instruction);
 int32_t get_i_type_imm(Dword instruction);
 int32_t get_s_type_imm(Dword instruction);
-int32_t get_b_type_imm(Dword instruction);
+int32_t get_b_type_imm(Dword instruction); // MADE CORRECTIONS -> WRITE TESTS TO CHECK
 int32_t get_j_type_imm(Dword instruction);
 
 
@@ -113,7 +113,7 @@ Instruction get_populated_instruction(Dword instruction, INST_TYPE type);
 
 
 // INSTRUCTION -> STRING, AS IN EXAMPLE
-std::string register_to_string(Dword reg);
+std::string register_to_string(Byte reg);
 std::string to_binary_string(Dword value, int bits);
 std::string instruction_to_string(Instruction inst, int position, bool isBlank);
 std::string handle_special_case(Instruction inst, EXACT_INSTRUCTION type, int position);
