@@ -96,7 +96,7 @@ Byte get_opcode(Dword instruction);
 int32_t get_i_type_imm(Dword instruction);
 int32_t get_s_type_imm(Dword instruction);
 int32_t get_b_type_imm(Dword instruction); // MADE CORRECTIONS -> WRITE TESTS TO CHECK
-int32_t get_j_type_imm(Dword instruction);
+int32_t get_jalr_imm(Dword instruction);
 
 
 // GET EXACT INSTRUCTIONS

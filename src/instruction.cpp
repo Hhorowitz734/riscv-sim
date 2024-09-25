@@ -89,12 +89,17 @@ Byte get_opcode(Dword instruction) { return (instruction & 0x7F); }
 * Therefore, preserving the sign bit is crucial here so that no meaning is lost.
 */
 int32_t get_i_type_imm(Dword instruction) {
+    /**
+     * Immediate that is first 12 bits
+     */
     int32_t imm = (instruction >> 20) & 0xFFF; 
     
     // Sign extend
     if (imm & 0x800) {
         imm |= 0xFFFFF000;  
     }
+
+    //std::cout << std::bitset<12>(imm) << std::endl;
     
     return imm;
 }
@@ -147,25 +152,24 @@ int32_t get_b_type_imm(Dword instruction) {
 
 
 
-int32_t get_j_type_imm(Dword instruction) {
-
+int32_t get_jalr_imm(Dword instruction) {
+    /**
+     * Jalr's immediate is the first 12 bits (31 - 20)
+     */
     int32_t imm = 0;
 
-    /*
-    * I won't comment on the bit operations here, as I'm using the same principle
-    * As in the other immediate extraction functions
-    */
-    imm |= ((instruction >> 31) & 0x1) << 20; 
-    imm |= ((instruction >> 12) & 0xFF) << 12;
-    imm |= ((instruction >> 20) & 0x1) << 11;
-    imm |= ((instruction >> 21) & 0x3FF) << 1;
-    
-    if (imm & 0x100000) {
-        imm |= 0xFFE00000;
+    // Extract bits 31-20
+    imm = (instruction >> 20) & 0xFFF;
+
+    // Sign extend
+    if (imm & (1 << 11)) { 
+        imm |= 0xFFFFF000;
     }
-    
+
     return imm;
 }
+
+
 
 
 
@@ -207,7 +211,7 @@ EXACT_INSTRUCTION decompose_JALR(Dword instruction) {
 
     Byte rd = get_rd(instruction);
     Byte rs1 = get_rs1(instruction);
-    Byte immediate = get_i_type_imm(instruction);
+    Byte immediate = get_jalr_imm(instruction);
 
     // For RET we have rd = 0, rs1 = 0x1, immediate = 0
 
@@ -315,7 +319,7 @@ Instruction get_populated_instruction(Dword instruction, INST_TYPE type) {
     switch (type) {
         case JAL:
             dummy.rd = get_rd(instruction);
-            dummy.imm = get_j_type_imm(instruction);
+            dummy.imm = get_i_type_imm(instruction);
             break;
         case JALR:
             dummy.rd = get_rd(instruction);
