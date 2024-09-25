@@ -94,6 +94,7 @@ Byte get_funct3(Dword instruction);
 Byte get_rd(Dword instruction);
 Byte get_opcode(Dword instruction);
 int32_t get_i_type_imm(Dword instruction);
+int32_t get_jal_imm(Dword instruction);
 int32_t get_s_type_imm(Dword instruction);
 int32_t get_b_type_imm(Dword instruction); // MADE CORRECTIONS -> WRITE TESTS TO CHECK
 int32_t get_jalr_imm(Dword instruction);

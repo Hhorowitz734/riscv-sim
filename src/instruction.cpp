@@ -104,6 +104,34 @@ int32_t get_i_type_imm(Dword instruction) {
     return imm;
 }
 
+int32_t get_jal_imm(Dword instruction) {
+
+    /**
+     * Jal's immediate is exceptionally strange,
+     * The bits need to be rearranged to work
+     */
+    int32_t imm = 0;
+
+    // Extract bits
+    imm |= ((instruction >> 31) & 0x1) << 20; // imm[20]
+    imm |= ((instruction >> 21) & 0x3FF) << 1; // imm[10:1]
+    imm |= ((instruction >> 20) & 0x1) << 11; // imm[11]
+    imm |= ((instruction >> 12) & 0xFF) << 12; // imm[19:12]
+
+    // Sign extend
+    if (imm & 0x100000) {
+        imm |= 0xFFE00000;
+    }
+
+    //imm >>= 11;
+
+    //std::cout << std::bitset<21>(imm) << std::endl;
+    //std::cout << imm << std::endl;
+
+    return imm;
+}
+
+
 int32_t get_s_type_imm(Dword instruction) {
 
     /**
@@ -319,7 +347,7 @@ Instruction get_populated_instruction(Dword instruction, INST_TYPE type) {
     switch (type) {
         case JAL:
             dummy.rd = get_rd(instruction);
-            dummy.imm = get_i_type_imm(instruction);
+            dummy.imm = get_jal_imm(instruction);
             break;
         case JALR:
             dummy.rd = get_rd(instruction);
