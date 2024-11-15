@@ -116,7 +116,7 @@ void Lexer::reset_instruction() {
 
 }
 
-void Lexer::read_next_instruction() { 
+Instruction Lexer::read_next_instruction() { 
 
     // Give default value for output
     std::string output = "";
@@ -136,7 +136,7 @@ void Lexer::read_next_instruction() {
     if (opcode == BLANK) {
         output = instruction_to_string(curr_instruction, start_position + (instructions_consumed * 4) - 4, true);
         write_output(output);
-        return;
+        return curr_instruction;
     }
 
     //std::cout << "Instruction type: " << itype_to_string(opcode) << std::endl;
@@ -158,7 +158,7 @@ void Lexer::read_next_instruction() {
     if (exact_instruction == RET || exact_instruction == NOP || exact_instruction == J) {
         output = handle_special_case(curr_instruction, exact_instruction, start_position + (instructions_consumed * 4) - 4);
         write_output(output);
-        return;
+        return curr_instruction;
     }
 
     //std::cout << exact_instruction_to_string(exact_instruction) << std::endl; 
@@ -166,6 +166,7 @@ void Lexer::read_next_instruction() {
     output = instruction_to_string(curr_instruction, start_position + (instructions_consumed * 4) - 4, false);
     write_output(output);
 
+    return curr_instruction;
 
 }
 

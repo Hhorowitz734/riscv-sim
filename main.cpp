@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "include/lexer.h"
+#include "include/pipeline.h"
 
 int main(int argc, char* argv[]) { 
 
@@ -33,6 +34,9 @@ int main(int argc, char* argv[]) {
     
     Lexer* lexer = new Lexer();
 
+    Pipeline* pipeline = new Pipeline();
+    Instruction curr_instruction;
+
 
     lexer->set_input_file(const_cast<char*>(inputfile.c_str()));
     lexer->set_output_file(const_cast<char*>(outputfile.c_str()));
@@ -40,7 +44,9 @@ int main(int argc, char* argv[]) {
     //std::cout << "File size: " << static_cast<int>(lexer->getFileSize()) << std::endl;
     
     while (!lexer->isEOF()) {
-        lexer->read_next_instruction();
+        curr_instruction = lexer->read_next_instruction();
+        pipeline->addInstruction(curr_instruction);
+
     }
 
     return 0;
