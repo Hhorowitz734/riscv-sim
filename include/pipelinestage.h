@@ -7,11 +7,11 @@
 enum StageType {
     IF, // Instruction Fetch (1/2)
     IS, // Instruction Fetch (2/2)
+    ID, // Instruction Decode, Hazard Check
     RF, // Register Fetch
     EX, // Execution
     DF, // Data Fetch (1/2)
     DS, // Data Fetch (2/2)
-    TC, // Tag Check
     WB  // Write Back
 };
 
@@ -38,11 +38,11 @@ public:
         switch (type) {
             case IF: return "IF";
             case IS: return "IS";
+            case ID: return "ID";
             case RF: return "RF";
             case EX: return "EX";
             case DF: return "DF";
             case DS: return "DS";
-            case TC: return "TC";
             case WB: return "WB";
             default: return "Unknown";
         }
@@ -71,6 +71,23 @@ public:
 
         return output;
     }
+
+
+    // Get instruction string
+    std::string getInstructionString() {
+
+        if (curr_instruction) {
+            return instruction_to_string(*curr_instruction, 0, false) + "\n";
+        } 
+
+        return "NOP\n";
+        
+    }
+
+
+
+
+
 
 
 
