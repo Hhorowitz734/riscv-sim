@@ -46,8 +46,11 @@ int main(int argc, char* argv[]) {
     while (!lexer->isEOF()) {
         curr_instruction = lexer->read_next_instruction();
         pipeline->addInstruction(curr_instruction);
-
     }
+
+    pipeline->sendNextInstruction();
+    //std::cout << pipeline->getPipelineStatusOutput();
+    std::cout << pipeline->getIntegerRegistersOutput();
 
     return 0;
 }	

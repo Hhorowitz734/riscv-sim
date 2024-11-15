@@ -74,7 +74,7 @@ Dword Lexer::consume_instruction() {
     // Handle case that no bytes remain
     if (fileSize - bitsConsumed < 32) {
         std::cerr << "No bytes left to read!" << std::endl; 
-        exit(0);
+        //exit(0);
     }
 
     // Buffer to read in byte

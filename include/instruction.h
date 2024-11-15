@@ -7,6 +7,7 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <vector>
 
 // Extra datatypes
 typedef bool Bit;
@@ -73,6 +74,25 @@ struct Instruction {
     Dword rs2; // Source register 2
     Dword rd; // Destination register
     int32_t imm; // Immediate value
+
+    // Add dependencies based on instruction type
+    std::vector<uint32_t> sources() const {
+        switch (type) {
+            case LOAD:   // LW uses rs1 for address calculation
+                return {rs1};
+            case STORE:  // SW uses rs1 for address and rs2 for value
+                return {rs1, rs2};
+            default:     // Other instructions (e.g., R-type)
+                return {rs1, rs2};
+        }
+    }
+
+    uint32_t destination() const {
+        if (type == LOAD) {
+            return rd; // LW writes to rd
+        }
+        return 0; // No destination for SW or other non-writing instructions
+    }
 
 };
 
