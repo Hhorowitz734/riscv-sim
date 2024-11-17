@@ -75,24 +75,47 @@ struct Instruction {
     Dword rd; // Destination register
     int32_t imm; // Immediate value
 
+    int result; // Result of the computation (for pipeline)
+
     // Add dependencies based on instruction type
-    std::vector<uint32_t> sources() const {
+    std::vector<uint32_t> getDependencies() const {
         switch (type) {
+            case JALR:
+                return {rs1};
             case LOAD:   // LW uses rs1 for address calculation
                 return {rs1};
             case STORE:  // SW uses rs1 for address and rs2 for value
+                return {rs1, rs2};
+            case I_TYPE:
+                return {rs1};
+            case IRR:
+                return {rs1, rs2};
+            case BRANCH:
                 return {rs1, rs2};
             default:     // Other instructions (e.g., R-type)
                 return {rs1, rs2};
         }
     }
 
-    uint32_t destination() const {
+    uint32_t getDestination() const {
         if (type == LOAD) {
             return rd; // LW writes to rd
+        } 
+        if (type == I_TYPE || type == IRR) {
+            return rd;
+        }
+        if (type == JAL || type == JALR) {
+            return rd;
         }
         return 0; // No destination for SW or other non-writing instructions
     }
+
+    int32_t getImmediate() const { return imm; }
+
+    INST_TYPE getInstType() const { return type; }
+    EXACT_INSTRUCTION getExactInstruction() const { return instruction; }
+
+    uint32_t getValue() const { return value; }
 
 };
 

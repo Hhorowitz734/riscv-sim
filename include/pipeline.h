@@ -3,6 +3,11 @@
 
 #include <vector> 
 #include <unordered_map>
+#include <iostream>
+#include <cstdint>
+#include <sstream>
+#include <iomanip>
+
 
 #include "instruction.h"
 #include "pipelinestage.h"
@@ -10,7 +15,7 @@
 struct PipelineRegisters {
 
     // IF
-    int npc = 500; // Next program counter   [IF/IS.NPC]
+    int npc = 496; // Next program counter   [IF/IS.NPC]
 
     // IS
     uint32_t instruction_register = 0; //   [IS/ID.IR]
@@ -123,6 +128,27 @@ public:
 
     // Pipeline advancing methods
     void sendNextInstruction();
+    void comprehensiveAdvance();
+    void advanceInstruction(StageType from, StageType to, bool deallocate = false);
+
+
+
+    // Pipeline stage methods
+    void ISAction(); //Simulates an instruction fetch
+    void executeInstruction(); // Performs computation currently in EX stage
+
+    // For executing instructions by type
+    void executeIRR();
+    void executeRType();
+    void executeLoad();
+    void executeStore();
+    void executeJType();
+    void executeBranch();
+
+    // Memory access helper functions
+    bool setDataMemory(uint32_t address, int32_t data);
+    int32_t getDataMemory(uint32_t address);
+    // Make some more for integer registers
 
     // To string methods
     std::string getCycleOutput();
@@ -162,9 +188,13 @@ private:
 
     std::unordered_map<StageType, PipelineStage> stages;  // The 8 pipeline stages
 
-    std::unordered_map<std::string, int> integer_registers; // Integer registers
+    std::unordered_map<std::string, int32_t> integer_registers; // Integer registers
 
-    std::unordered_map<int, int> data_memory;
+    std::unordered_map<uint32_t, int32_t> data_memory;
+
+    std::unordered_map<int, Instruction> instruction_map; //Maps PC to instruction
+
+    int pc = 492; // Program counter
 
 };
 

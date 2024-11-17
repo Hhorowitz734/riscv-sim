@@ -48,13 +48,22 @@ int main(int argc, char* argv[]) {
         pipeline->addInstruction(curr_instruction);
     }
 
-    pipeline->sendNextInstruction();
     //std::cout << pipeline->getPipelineStatusOutput();
     //std::cout << pipeline->getIntegerRegistersOutput();
     //std::cout << pipeline->getPipelineRegistersOutput();
     //std::cout << pipeline->getStalledInstruction();
     //std::cout << pipeline->getPCOutput();
 
+    //std::cout << pipeline->getCycleOutput();
+    //pipeline->comprehensiveAdvance();
+
+    pipeline->comprehensiveAdvance();
+    
+    pipeline->comprehensiveAdvance();
+
+    pipeline->comprehensiveAdvance();
+    pipeline->comprehensiveAdvance();
+    pipeline->comprehensiveAdvance();
     std::cout << pipeline->getCycleOutput();
 
     return 0;

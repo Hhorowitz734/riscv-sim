@@ -3,6 +3,9 @@
 
 #include "instruction.h"
 #include <memory>
+#include <vector>
+#include <regex>
+
 
 enum StageType {
     IF, // Instruction Fetch (1/2)
@@ -19,82 +22,52 @@ class PipelineStage {
 
 public: 
 
-    PipelineStage() : type(StageType::IF) {} // Default to IF or an invalid state
-    PipelineStage(StageType type) : type(type) {};
+    PipelineStage(); // Default to IF or an invalid state
+    PipelineStage(StageType type);
 
 
     // Instruction management
 
-    void setInstruction(std::unique_ptr<Instruction> instr) { curr_instruction = std::move(instr); }
-    std::unique_ptr<Instruction> clearInstruction() { return std::move(curr_instruction); }
-    bool isEmpty() const { return curr_instruction == nullptr; }
+    void setInstruction(std::unique_ptr<Instruction> instr);
+    std::unique_ptr<Instruction> clearInstruction();
+    bool isEmpty() const;
 
     
-    // Getter
-    StageType getStageType() const { return type; }
+    // Getters NEED TO UPDATE THESE FOR MEMORY SAFETY
+    StageType getStageType() const;
+    std::vector<uint32_t> getDependencies() const; // Protect these from segfaults
+    uint32_t getDestination() const;
+    int32_t getImmediate() const;
+    EXACT_INSTRUCTION getExactInstruction() const;
+    uint32_t getValue() const;
+    void deallocateInstruction();
+    INST_TYPE getInstructionType();
+
+    // DO NOT USE THIS EXCEPT TO MOVE !!!
+    std::unique_ptr<Instruction>& getInstruction(); // !!!
+    // DO NOT USE THIS EXCEPT TO MOVE!! 
+
+
+    // Get and set current state
+    void setState(std::string updatedState);
+    std::string getState() const;
+
+    void updateStatus();
+
 
     // Utility functions
-    std::string getStageName() const {
-        switch (type) {
-            case IF: return "IF";
-            case IS: return "IS";
-            case ID: return "ID";
-            case RF: return "RF";
-            case EX: return "EX";
-            case DF: return "DF";
-            case DS: return "DS";
-            case WB: return "WB";
-            default: return "Unknown";
-        }
-    }
+    std::string getStageName() const;
+    std::string getInstructionString(); // Get instruction string
 
-    // Print stage state
-    std::string getState() const {
-        std::string output;
-
-        // Append stage name
-        output += getStageName();
-        output += ": ";
-
-        // If IF stage, print <unknown>
-        if (type == IF) {
-            output += "<unknown>\n";
-            return output;
-        }
-
-        // Append instruction or NOP
-        if (curr_instruction) {
-            output += instruction_to_string(*curr_instruction, 0, false) + "\n";
-        } else {
-            output += "NOP\n";
-        }
-
-        return output;
-    }
-
-
-    // Get instruction string
-    std::string getInstructionString() {
-
-        if (curr_instruction) {
-            return instruction_to_string(*curr_instruction, 0, false) + "\n";
-        } 
-
-        return "NOP\n";
-        
-    }
-
-
-
-
-
-
-
+    
 
 private:
 
     StageType type;
     std::unique_ptr<Instruction> curr_instruction;
+    std::string state = "* " + getStageName() + " : NOP\n";
+
+    std::string new_style_istring;
 
 
 };

@@ -14,6 +14,7 @@ set(SOURCE_FILES
     ../src/instruction.cpp
     ../src/lexer.cpp
     ../src/pipeline.cpp
+    ../src/pipelinestage.cpp
 )
 
 # Include directories for headers
