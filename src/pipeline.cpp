@@ -5,11 +5,11 @@ Pipeline::Pipeline() {
     // Initialize the 8 pipeline stages
     stages[StageType::IF] = PipelineStage(StageType::IF);
     stages[StageType::IS] = PipelineStage(StageType::IS);
+    stages[StageType::ID] = PipelineStage(StageType::ID);
     stages[StageType::RF] = PipelineStage(StageType::RF);
     stages[StageType::EX] = PipelineStage(StageType::EX);
     stages[StageType::DF] = PipelineStage(StageType::DF);
     stages[StageType::DS] = PipelineStage(StageType::DS);
-    stages[StageType::TC] = PipelineStage(StageType::TC);
     stages[StageType::WB] = PipelineStage(StageType::WB);
 
     // Initialize the 32 integer registers
@@ -72,8 +72,7 @@ void Pipeline::comprehensiveAdvance() {
     pipeline_registers.npc = pc + 4;
 
     advanceInstruction(WB, WB, true);
-    advanceInstruction(TC, WB);
-    advanceInstruction(DS, TC);
+    advanceInstruction(DS, WB);
     advanceInstruction(DF, DS);
     advanceInstruction(EX, DF);
     advanceInstruction(RF, EX);
@@ -87,6 +86,8 @@ void Pipeline::comprehensiveAdvance() {
     // Perform pipeline actions
     ISAction();
     executeInstruction();
+    writeBack();
+    dataStore();
 
 
    
@@ -134,11 +135,11 @@ bool Pipeline::allPipelineStagesEmpty() {
 
     if (stages[IF].isEmpty() &&
         stages[IS].isEmpty() &&
+        stages[ID].isEmpty() &&
         stages[RF].isEmpty() &&
         stages[EX].isEmpty() &&
         stages[DF].isEmpty() &&
         stages[DS].isEmpty() &&
-        stages[TC].isEmpty() &&
         stages[WB].isEmpty()) { return true; }
 
     return false;
@@ -244,18 +245,61 @@ void Pipeline::executeInstruction() {
 
 }
 
+void Pipeline::dataStore() {
+
+    if (stages[StageType::DS].isEmpty()) {
+        std::cerr << "Cannot store data when no instruction in DS." << std::endl;
+        return;
+    }
+
+    EXACT_INSTRUCTION instruction_type = stages[StageType::DS].getExactInstruction();
+
+    // Assumption: Only SW instructions use the DS stage
+    if (instruction_type != SW) { return; }
+
+    setDataMemory(stages[StageType::DS].getMemAddress()
+                ,stages[StageType::DS].getResult());
+
+
+}
+
+void Pipeline::writeBack() {
+
+    if (stages[StageType::WB].isEmpty()) {
+        std::cerr << "Cannot write back when no instruction in WB." << std::endl;
+        return;
+    }
+
+    INST_TYPE instruction_type = stages[StageType::WB].getInstructionType();
+
+    uint32_t destination;
+    std::string destination_register;
+
+
+    switch(instruction_type) {
+        case I_TYPE: // ADDI, SLTI
+        case IRR:
+            destination = stages[StageType::WB].getDestination();
+            destination_register = "R" + std::to_string(destination);
+            integer_registers[destination_register] = stages[StageType::WB].getResult();
+        default:
+            return;
+    }
+
+}
+
 void Pipeline::executeIRR() {
 
     // ADDI, SLTI, NOP
 
     // Gets dependencies, destination, and immediate of instruction in EX stage
     std::vector<uint32_t> dependencies = stages[StageType::EX].getDependencies();
-    uint32_t destination = stages[StageType::EX].getDestination();
+    //uint32_t destination = stages[StageType::EX].getDestination();
     int32_t immediate = stages[StageType::EX].getImmediate();
 
     // Does string manip to get everything into useable form
     std::string source_register = "R" + std::to_string(dependencies[0]);
-    std::string destination_register = "R" + std::to_string(destination);
+    //std::string destination_register = "R" + std::to_string(destination);
 
     // Gets the exact instruction we need to compute
     EXACT_INSTRUCTION inst = stages[StageType::EX].getExactInstruction();
@@ -263,11 +307,10 @@ void Pipeline::executeIRR() {
     // Perform necessary computation
     switch(inst) {
         case ADDI:
-            integer_registers[destination_register] = integer_registers[source_register] + immediate;
+            stages[EX].setResult(integer_registers[source_register] + immediate);
             return;
         case SLTI:
-            integer_registers[destination_register] = 
-                (static_cast<int32_t>(integer_registers[source_register]) < immediate) ? 1 : 0;
+            stages[EX].setResult((static_cast<int32_t>(integer_registers[source_register]) < immediate) ? 1 : 0);
             return;
         default:
             std::cerr << "Could not execute IRR Type Instruction" << std::endl;
@@ -283,10 +326,10 @@ void Pipeline::executeRType() {
     std::vector<uint32_t> dependencies = stages[StageType::EX].getDependencies();
     uint32_t dep_1 = dependencies[0];
     uint32_t dep_2 = dependencies[1];
-    uint32_t destination = stages[StageType::EX].getDestination();
+    //uint32_t destination = stages[StageType::EX].getDestination();
 
     // Does string manip to get everything into useable form
-    std::string destination_register = "R" + std::to_string(destination);
+    //std::string destination_register = "R" + std::to_string(destination);
     std::string source_register_1 = "R" + std::to_string(dependencies[0]);
     std::string source_register_2 = "R" + std::to_string(dependencies[1]);
 
@@ -296,29 +339,28 @@ void Pipeline::executeRType() {
     //Perform necessary computation
     switch(inst) {
         case ADD:
-            integer_registers[destination_register] = integer_registers[source_register_1] + integer_registers[source_register_2];
+            stages[EX].setResult(integer_registers[source_register_1] + integer_registers[source_register_2]);
             return;
         case SUB:
-            integer_registers[destination_register] = integer_registers[source_register_1] - integer_registers[source_register_2];
+            stages[EX].setResult(integer_registers[source_register_1] - integer_registers[source_register_2]);
             return;
         case SLL:
-            integer_registers[destination_register] = integer_registers[source_register_1] << (integer_registers[source_register_2] & 0x1F);
+            stages[EX].setResult((integer_registers[source_register_1] << (integer_registers[source_register_2] & 0x1F)));
             return;
         case SRL:
-            integer_registers[destination_register] = 
-                static_cast<uint32_t>(integer_registers[source_register_1]) >> (integer_registers[source_register_2] & 0x1F);
+            stages[EX].setResult((static_cast<uint32_t>(integer_registers[source_register_1]) >> (integer_registers[source_register_2] & 0x1F)));
             return;
         case SLT:
-            integer_registers[destination_register] = (static_cast<int32_t>(integer_registers[source_register_1]) < static_cast<int32_t>(integer_registers[source_register_2])) ? 1 : 0;
+            stages[EX].setResult((static_cast<int32_t>(integer_registers[source_register_1]) < static_cast<int32_t>(integer_registers[source_register_2])) ? 1 : 0);
             return;
         case AND:
-            integer_registers[destination_register] = integer_registers[source_register_1] & integer_registers[source_register_2];
+            stages[EX].setResult(integer_registers[source_register_1] & integer_registers[source_register_2]);
             return;
         case OR:
-            integer_registers[destination_register] = integer_registers[source_register_1] | integer_registers[source_register_2];
+            stages[EX].setResult(integer_registers[source_register_1] | integer_registers[source_register_2]);
             return;
         case XOR:
-            integer_registers[destination_register] = integer_registers[source_register_1] ^ integer_registers[source_register_2];
+            stages[EX].setResult(integer_registers[source_register_1] ^ integer_registers[source_register_2]);
             return;
         default:
             std::cerr << "Could not execute R Type Instruction" << std::endl;
@@ -383,14 +425,15 @@ void Pipeline::executeStore() {
     uint32_t memory_address = base_address + offset;
 
     // Retrieve the value from the source register (rs2)
-    int32_t value_to_store = integer_registers[source_register];
+    //int32_t value_to_store = integer_registers[source_register]; 
+    stages[StageType::EX].setResult(integer_registers[source_register]);
+    // THIS SHOULD HAPPEN DURING RF STAGE!!! FIX FIX FIX
 
-    // Write the value to data memory
-    setDataMemory(memory_address, value_to_store);
+    stages[StageType::EX].setMemAddress(memory_address);
 
-    // Debugging output
-    std::cout << "SW executed: Stored value " << value_to_store
-              << " into memory address " << memory_address << std::endl;
+    // Write the value to data memory (during DS stage)
+    //setDataMemory(memory_address, value_to_store);
+
 }
 
 void Pipeline::executeJType() {
@@ -516,7 +559,7 @@ std::string Pipeline::getCycleOutput() {
     std::ostringstream output;
 
     // Cycle header
-    output << "***** Cycle #" << curr_cycle << "***********************************************\n";
+    output << "***** Cycle #" << (curr_cycle - 1) << "***********************************************\n";
 
     // Current PC
     output << getPCOutput();
@@ -553,11 +596,11 @@ std::string Pipeline::getPipelineStatusOutput() {
     // Iterate through the stages and append their state to the output
     output += stages[StageType::IF].getState();
     output += stages[StageType::IS].getState();
+    output += stages[StageType::ID].getState();
     output += stages[StageType::RF].getState();
     output += stages[StageType::EX].getState();
     output += stages[StageType::DF].getState();
     output += stages[StageType::DS].getState();
-    output += stages[StageType::TC].getState();
     output += stages[StageType::WB].getState();
 
     return output;

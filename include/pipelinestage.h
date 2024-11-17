@@ -10,11 +10,11 @@
 enum StageType {
     IF, // Instruction Fetch (1/2)
     IS, // Instruction Fetch (2/2)
+    ID,
     RF, // Register Fetch
     EX, // Execution
     DF, // Data Fetch (1/2)
     DS, // Data Fetch (2/2)
-    TC,
     WB  // Write Back
 };
 
@@ -46,6 +46,13 @@ public:
     // DO NOT USE THIS EXCEPT TO MOVE !!!
     std::unique_ptr<Instruction>& getInstruction(); // !!!
     // DO NOT USE THIS EXCEPT TO MOVE!! 
+
+    void setResult(int32_t newResult); // for setting the result of a computation in ex stage
+    int32_t getResult() const;
+
+    // for seetting memory address for store
+    void setMemAddress(uint32_t newAddress);
+    uint32_t getMemAddress() const;
 
 
     // Get and set current state

@@ -75,7 +75,8 @@ struct Instruction {
     Dword rd; // Destination register
     int32_t imm; // Immediate value
 
-    int result; // Result of the computation (for pipeline)
+    int32_t result; // Result of the computation (for pipeline)
+    uint32_t mem_address_store; //For SW instruction
 
     // Add dependencies based on instruction type
     std::vector<uint32_t> getDependencies() const {
@@ -116,6 +117,12 @@ struct Instruction {
     EXACT_INSTRUCTION getExactInstruction() const { return instruction; }
 
     uint32_t getValue() const { return value; }
+
+    int32_t getResult() const { return result; }
+    void setResult(int32_t newResult) { result = newResult; }
+
+    uint32_t getMemAddress() const { return mem_address_store; }
+    void setMemAddress(uint32_t newAddress) { mem_address_store = newAddress; }
 
 };
 

@@ -137,6 +137,9 @@ public:
     // Pipeline stage methods
     void ISAction(); //Simulates an instruction fetch
     void executeInstruction(); // Performs computation currently in EX stage
+    void dataStore(); // Simulates DS stage
+    void writeBack(); // Simulates WB stage
+
 
     // For executing instructions by type
     void executeIRR();

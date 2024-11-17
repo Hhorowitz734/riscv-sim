@@ -66,6 +66,58 @@ uint32_t PipelineStage::getValue() const { return curr_instruction->getValue(); 
 void PipelineStage::deallocateInstruction() { curr_instruction.reset(); }
 std::unique_ptr<Instruction>& PipelineStage::getInstruction() { return curr_instruction; }
 
+void PipelineStage::setResult(int32_t newResult) {
+
+    if (type != EX) {
+        std::cerr << "Should not be setting a result outside of EX stage." << std::endl;
+        return;
+    }
+
+    if (isEmpty()) {
+        std::cerr << "Cannot set result of empty instruction." << std::endl;
+        return;
+    }
+
+    curr_instruction->setResult(newResult);
+}
+
+int32_t PipelineStage::getResult() const {
+
+    if (isEmpty()) {
+        std::cerr << "Cannot get result of empty instruction." << std::endl;
+        return -1;
+    }
+
+    return curr_instruction->getResult();
+}
+
+void PipelineStage::setMemAddress(uint32_t newAddress) {
+
+    if (type != EX) {
+        std::cerr << "Should not be setting a memory address outside of EX stage." << std::endl;
+        return;
+    }
+
+    if (isEmpty()) { 
+        std::cerr << "Cannot set memory address of empty instruction." << std::endl;
+        return;
+    }
+
+    curr_instruction->setMemAddress(newAddress);
+
+}
+
+uint32_t PipelineStage::getMemAddress() const {
+
+    if (isEmpty()) { 
+        std::cerr << "Cannot get memory address of empty instruction." << std::endl;
+        return -1;
+    }
+
+    return curr_instruction->getMemAddress();
+
+}
+
 INST_TYPE PipelineStage::getInstructionType() {
     if (!isEmpty()) { return curr_instruction->getInstType(); }
     std::cerr << "Trying to get type of empty instruction" << std::endl;
@@ -109,11 +161,11 @@ std::string PipelineStage::getStageName() const {
     switch (type) {
         case IF: return "IF";
         case IS: return "IS";
+        case ID: return "ID";
         case RF: return "RF";
         case EX: return "EX";
         case DF: return "DF";
         case DS: return "DS";
-        case TC: return "TC";
         case WB: return "WB";
         default: return "Unknown";
     }
