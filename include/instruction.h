@@ -8,6 +8,8 @@
 #include <sstream>
 #include <iomanip>
 #include <vector>
+#include <unordered_map>
+
 
 // Extra datatypes
 typedef bool Bit;
@@ -27,6 +29,11 @@ enum INST_TYPE {
     I_TYPE = 0x13, //Immediate
     BRANCH = 0x63,
     OTHER = 0xFF
+};
+
+enum DEPENDENCY_TYPE {
+    RS1,
+    RS2
 };
 
 
@@ -76,39 +83,61 @@ struct Instruction {
     int32_t imm; // Immediate value
 
     int32_t result; // Result of the computation (for pipeline)
-    uint32_t mem_address_store; //For SW instruction
+    int32_t mem_address_store; //For instructions where you need to store an address
 
-    // Add dependencies based on instruction type
-    std::vector<uint32_t> getDependencies() const {
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> registerValues; // Values of registers, retrieved during RF stage
+
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> getRegisterValues() const { return registerValues; }
+    void setRegisterValue(DEPENDENCY_TYPE reg, int32_t newValue) { registerValues[reg] = newValue; }
+    
+
+        
+    std::unordered_map<DEPENDENCY_TYPE, uint32_t> getDependencies() const {
+
+        std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies;
+
         switch (type) {
-            case JALR:
-                return {rs1};
-            case LOAD:   // LW uses rs1 for address calculation
-                return {rs1};
-            case STORE:  // SW uses rs1 for address and rs2 for value
-                return {rs1, rs2};
-            case I_TYPE:
-                return {rs1};
-            case IRR:
-                return {rs1, rs2};
-            case BRANCH:
-                return {rs1, rs2};
-            default:     // Other instructions (e.g., R-type)
-                return {rs1, rs2};
+            case JALR: // JALR uses rs1
+                dependencies[RS1] = rs1;
+                break;
+
+            case LOAD: // LW uses rs1 for address calculation
+                dependencies[RS1] = rs1;
+                break;
+
+            case STORE: // SW uses rs1 for address and rs2 for value
+                dependencies[RS1] = rs1;
+                dependencies[RS2] = rs2;
+                break;
+
+            case I_TYPE: // I-Type instructions use rs1
+                dependencies[RS1] = rs1;
+                break;
+
+            case IRR: // R-Type instructions (e.g., ADD, SUB) use rs1 and rs2
+            case BRANCH: // Branch instructions use rs1 and rs2
+                dependencies[RS1] = rs1;
+                dependencies[RS2] = rs2;
+                break;
+
+            default: // Default case handles other instructions with rs1 and rs2
+                dependencies[RS1] = rs1;
+                dependencies[RS2] = rs2;
+                break;
         }
+
+        return dependencies;
     }
 
     uint32_t getDestination() const {
-        if (type == LOAD) {
-            return rd; // LW writes to rd
-        } 
-        if (type == I_TYPE || type == IRR) {
-            return rd;
+
+        if (type == STORE || type == BRANCH || type == BLANK || type == OTHER) {
+            std::cerr << "Error: Instruction of type " << type << " should not have a destination." << std::endl;
+            return static_cast<uint32_t>(-1); // Return a sentinel value indicating no destination
         }
-        if (type == JAL || type == JALR) {
-            return rd;
-        }
-        return 0; // No destination for SW or other non-writing instructions
+
+        return rd;
+
     }
 
     int32_t getImmediate() const { return imm; }

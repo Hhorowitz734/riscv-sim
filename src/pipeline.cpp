@@ -85,6 +85,7 @@ void Pipeline::comprehensiveAdvance() {
 
     // Perform pipeline actions
     ISAction();
+    registerFetch();
     executeInstruction();
     writeBack();
     dataStore();
@@ -187,8 +188,206 @@ void Pipeline::ISAction() {
 
 }
 
+void Pipeline::instructionDecode() {
+    /**
+     * IN THIS STAGE WE ALSO NEED TO DO HAZARD CHECKS
+     * I WILL SKIP THIS FOR NOW
+     */
+
+    return;
+}
 
 
+
+void Pipeline::registerFetch() {
+    /**
+     * Simulates the Register Fetch (RF) stage
+     */
+
+    if (stages[StageType::RF].isEmpty()) {
+        std::cerr << "Cannot fetch register when no instruction in RF." << std::endl;
+        return;
+    }
+
+    INST_TYPE instruction_type = stages[StageType::RF].getInstructionType();
+
+    switch (instruction_type) {
+        case JAL:
+        case JALR:
+            return registerFetchJType();
+        case I_TYPE:
+            return registerFetchIRR();
+        case BRANCH:
+            return registerFetchBranch();
+        case LOAD:
+        case STORE:
+            return registerFetchJType();
+        default:
+            return;
+
+    }
+
+
+
+}
+
+void Pipeline::registerFetchJType() {
+
+    // Handles JAL, J, JALR, RET
+
+    // Figure out the exact J Type instruction
+    EXACT_INSTRUCTION instruction = stages[StageType::RF].getExactInstruction();
+
+    // Fetch dependencies
+    std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::RF].getDependencies();
+    int32_t mem_address_value;
+
+
+    switch(instruction) {
+
+        case JAL_E: // JAL and J do nothing during RF stage
+        case J:
+            return;
+        case JALR_E:
+            // Fetches value in RS1 and sets memory address to return to accordingly
+            mem_address_value = integer_registers["R" + std::to_string(dependencies[RS1])];
+            stages[StageType::RF].setRegisterValue(RS1, mem_address_value);
+            return;
+        case RET:
+            // Sets return address to value in R1
+            mem_address_value = integer_registers["R1"];
+            stages[StageType::RF].setRegisterValue(RS1, mem_address_value);
+            return;
+        default:
+            std::cerr << "Could not find specific J type instruction." << std::endl;
+            return;
+    }
+
+
+
+}
+
+void Pipeline::registerFetchLoadStore() {
+
+    // Get exact instruction and dependencies
+    EXACT_INSTRUCTION instruction = stages[StageType::RF].getExactInstruction();
+    std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::RF].getDependencies();
+
+    int32_t mem_address_value;
+    int32_t value_to_store;
+
+    switch(instruction) {
+
+        case LW:
+            // Gets just RS1 (address to load from)
+            mem_address_value = integer_registers["R" + std::to_string(dependencies[RS1])];
+            stages[StageType::RF].setRegisterValue(RS1, mem_address_value);
+            return;
+
+        case SW:
+            // Gets RS1 (address to store to) and RS2 (value to store)
+            mem_address_value = integer_registers["R" + std::to_string(dependencies[RS1])];
+            stages[StageType::RF].setRegisterValue(RS1, mem_address_value);
+
+            value_to_store = integer_registers["R" + std::to_string(dependencies[RS2])];
+            stages[StageType::RF].setRegisterValue(RS2, value_to_store);
+            return;
+        
+
+        default:
+            std::cerr << "Unhandled type not of LW or SW in RF stage" << std::endl;
+            return;
+
+    }
+
+}
+
+void Pipeline::registerFetchRType() {
+
+    // Get exact instruction and dependencies
+    EXACT_INSTRUCTION instruction = stages[StageType::RF].getExactInstruction();
+
+    if (instruction != ADD &&
+        instruction != SUB &&
+        instruction != SLT &&
+        instruction != SLL &&
+        instruction != AND &&
+        instruction != OR &&
+        instruction != XOR) {
+            std::cerr << "Incorrect type of instruction passed to registerFetchRType()" << std::endl;
+            return;
+        }
+    
+    
+    std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::RF].getDependencies();
+
+    // Fetch sources from integer register
+    int32_t source_1 = integer_registers["R" + std::to_string(dependencies[RS1])];
+    int32_t source_2 = integer_registers["R" + std::to_string(dependencies[RS2])];
+
+    // Save values
+    stages[StageType::RF].setRegisterValue(RS1, source_1);
+    stages[StageType::RF].setRegisterValue(RS2, source_2);
+
+    return;
+
+}
+
+void Pipeline::registerFetchIRR() {
+    /**
+     * IMMEDIATE SHOULD ALREADY BE FETCHED IN ID
+     */
+
+    // ADDI, SLTI, NOP
+
+    // Get exact instruction and dependencies
+    EXACT_INSTRUCTION instruction = stages[StageType::RF].getExactInstruction();
+
+    if (instruction != ADDI && instruction != SLTI && instruction != NOP) { 
+        std::cerr << "Improper instruction type passed to registerFetchIRR" << std::endl;
+        return; }
+    if (instruction == NOP) { return; } //just in case i need to handle this later so i dont forget
+
+    std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::RF].getDependencies();
+
+    // RS1 is fetched as the source for the operation
+    int32_t source_1 = integer_registers["R" + std::to_string(dependencies[RS1])];
+
+    stages[StageType::RF].setRegisterValue(RS1, source_1);
+
+    return;
+
+}
+
+void Pipeline::registerFetchBranch() {
+    // BEQ, BNE, BGE, BLT
+    /**
+     * Offset should be decoded in ID
+     */
+
+    EXACT_INSTRUCTION instruction = stages[StageType::RF].getExactInstruction();
+
+    if (instruction != BEQ &&
+        instruction != BNE &&
+        instruction != BGE &&
+        instruction != BLT) {
+            std::cerr << "Improper instruction type passed to registerFetchBranch()" << std::endl;
+            return;
+        }
+
+    std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::RF].getDependencies();
+
+    // Fetch sources from integer register
+    int32_t source_1 = integer_registers["R" + std::to_string(dependencies[RS1])];
+    int32_t source_2 = integer_registers["R" + std::to_string(dependencies[RS2])];
+
+    // Save values
+    stages[StageType::RF].setRegisterValue(RS1, source_1);
+    stages[StageType::RF].setRegisterValue(RS2, source_2);
+
+    return;
+    
+}
 
 
 void Pipeline::executeInstruction() {
@@ -293,13 +492,12 @@ void Pipeline::executeIRR() {
     // ADDI, SLTI, NOP
 
     // Gets dependencies, destination, and immediate of instruction in EX stage
-    std::vector<uint32_t> dependencies = stages[StageType::EX].getDependencies();
-    //uint32_t destination = stages[StageType::EX].getDestination();
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
+
     int32_t immediate = stages[StageType::EX].getImmediate();
 
-    // Does string manip to get everything into useable form
-    std::string source_register = "R" + std::to_string(dependencies[0]);
-    //std::string destination_register = "R" + std::to_string(destination);
+    int32_t source_value = register_values[RS1];
+
 
     // Gets the exact instruction we need to compute
     EXACT_INSTRUCTION inst = stages[StageType::EX].getExactInstruction();
@@ -307,10 +505,10 @@ void Pipeline::executeIRR() {
     // Perform necessary computation
     switch(inst) {
         case ADDI:
-            stages[EX].setResult(integer_registers[source_register] + immediate);
+            stages[EX].setResult(source_value + immediate);
             return;
         case SLTI:
-            stages[EX].setResult((static_cast<int32_t>(integer_registers[source_register]) < immediate) ? 1 : 0);
+            stages[EX].setResult((static_cast<int32_t>(source_value) < immediate) ? 1 : 0);
             return;
         default:
             std::cerr << "Could not execute IRR Type Instruction" << std::endl;
@@ -323,44 +521,39 @@ void Pipeline::executeRType() {
     // ADD, SUB, SLL, SRL, SLT, AND, OR, XOR
 
     // Get dependencies and destination
-    std::vector<uint32_t> dependencies = stages[StageType::EX].getDependencies();
-    uint32_t dep_1 = dependencies[0];
-    uint32_t dep_2 = dependencies[1];
-    //uint32_t destination = stages[StageType::EX].getDestination();
-
-    // Does string manip to get everything into useable form
-    //std::string destination_register = "R" + std::to_string(destination);
-    std::string source_register_1 = "R" + std::to_string(dependencies[0]);
-    std::string source_register_2 = "R" + std::to_string(dependencies[1]);
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
 
     // Gets the exact instruction we need to compute
     EXACT_INSTRUCTION inst = stages[StageType::EX].getExactInstruction();
-    
+
+    int32_t source_register_1 = register_values[RS1];
+    int32_t source_register_2 = register_values[RS2];
+
     //Perform necessary computation
     switch(inst) {
         case ADD:
-            stages[EX].setResult(integer_registers[source_register_1] + integer_registers[source_register_2]);
+            stages[EX].setResult(source_register_1 + source_register_2);
             return;
         case SUB:
-            stages[EX].setResult(integer_registers[source_register_1] - integer_registers[source_register_2]);
+            stages[EX].setResult(source_register_1 - source_register_2);
             return;
         case SLL:
-            stages[EX].setResult((integer_registers[source_register_1] << (integer_registers[source_register_2] & 0x1F)));
+            stages[EX].setResult((source_register_1 << (source_register_2 & 0x1F)));
             return;
         case SRL:
-            stages[EX].setResult((static_cast<uint32_t>(integer_registers[source_register_1]) >> (integer_registers[source_register_2] & 0x1F)));
+            stages[EX].setResult((static_cast<uint32_t>(source_register_1) >> (source_register_2 & 0x1F)));
             return;
         case SLT:
-            stages[EX].setResult((static_cast<int32_t>(integer_registers[source_register_1]) < static_cast<int32_t>(integer_registers[source_register_2])) ? 1 : 0);
+            stages[EX].setResult((static_cast<int32_t>(source_register_1) < static_cast<int32_t>(source_register_2)) ? 1 : 0);
             return;
         case AND:
-            stages[EX].setResult(integer_registers[source_register_1] & integer_registers[source_register_2]);
+            stages[EX].setResult(source_register_1 & source_register_2);
             return;
         case OR:
-            stages[EX].setResult(integer_registers[source_register_1] | integer_registers[source_register_2]);
+            stages[EX].setResult(source_register_1 | source_register_2);
             return;
         case XOR:
-            stages[EX].setResult(integer_registers[source_register_1] ^ integer_registers[source_register_2]);
+            stages[EX].setResult(source_register_1 ^ source_register_2);
             return;
         default:
             std::cerr << "Could not execute R Type Instruction" << std::endl;
@@ -376,23 +569,13 @@ void Pipeline::executeLoad() {
     // Get offset, register, destination
     int32_t offset = stages[StageType::EX].getImmediate();
     uint32_t destination = stages[StageType::EX].getDestination();
-    std::vector<uint32_t> dependencies = stages[StageType::EX].getDependencies();
-
-    /**
-     * std::cout << "Destination: R" << std::to_string(destination) << std::endl;
-    std::cout << "Offset: " << std::to_string(offset) << std::endl;
-    std::cout << "Dependency: R" << std::to_string(dependencies[0]) << std::endl;
-     * 
-     */
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
     
-
     // Does string manip to get everything into useable form
     std::string destination_register = "R" + std::to_string(destination);
-    std::string source_register = "R" + std::to_string(dependencies[0]);
-
 
     // Base address from source register
-    uint32_t base_address = integer_registers[source_register];
+    uint32_t base_address = register_values[RS1];
 
     // Calculate effective memory address
     uint32_t memory_address = base_address + offset;
@@ -414,25 +597,17 @@ void Pipeline::executeStore() {
     // Get offset, destination (base register), and dependencies (source register rs2)
     int32_t offset = stages[StageType::EX].getImmediate();
     uint32_t base_register_index = stages[StageType::EX].getDestination(); // rs1 (base register)
-    std::vector<uint32_t> dependencies = stages[StageType::EX].getDependencies(); // rs2 (source register)
 
     // Convert base register (rs1) and source register (rs2) to strings
     std::string base_register = "R" + std::to_string(base_register_index); // e.g., "R3"
-    std::string source_register = "R" + std::to_string(dependencies[0]);   // e.g., "R5"
 
     // Calculate the effective memory address
     uint32_t base_address = integer_registers[base_register];
     uint32_t memory_address = base_address + offset;
 
     // Retrieve the value from the source register (rs2)
-    //int32_t value_to_store = integer_registers[source_register]; 
-    stages[StageType::EX].setResult(integer_registers[source_register]);
-    // THIS SHOULD HAPPEN DURING RF STAGE!!! FIX FIX FIX
 
     stages[StageType::EX].setMemAddress(memory_address);
-
-    // Write the value to data memory (during DS stage)
-    //setDataMemory(memory_address, value_to_store);
 
 }
 
@@ -441,12 +616,12 @@ void Pipeline::executeJType() {
 
     int32_t offset = stages[StageType::EX].getImmediate();
     uint32_t pc_place_addr = stages[StageType::EX].getDestination(); // Address to place current PC
-    std::vector<uint32_t> dependencies = stages[StageType::EX].getDependencies();
 
     uint32_t base_address;
 
     std::string destination_register = "R" + std::to_string(pc_place_addr);
-    std::string address_register = "R" + std::to_string(dependencies[0]);
+
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
 
     // Gets the exact instruction we need to compute
     EXACT_INSTRUCTION inst = stages[StageType::EX].getExactInstruction();
@@ -457,7 +632,7 @@ void Pipeline::executeJType() {
             pc += offset;
             return;
         case JALR_E: //check this
-            base_address = integer_registers[address_register];
+            base_address = register_values[RS1];
             integer_registers[destination_register] = pipeline_registers.npc;
             pc = (base_address + offset) & ~1;
             return;
@@ -470,15 +645,11 @@ void Pipeline::executeJType() {
 
 void Pipeline::executeBranch() {
     
-    std::vector<uint32_t> dependencies = stages[StageType::EX].getDependencies();
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
     int32_t offset = stages[StageType::EX].getImmediate();
 
-    // Registers to compare
-    std::string term1_register = "R" + std::to_string(dependencies[0]);
-    std::string term2_register = "R" + std::to_string(dependencies[1]);
-
-    uint32_t term1 = integer_registers[term1_register];
-    uint32_t term2 = integer_registers[term2_register];
+    uint32_t term1 = register_values[RS1];
+    uint32_t term2 = register_values[RS2];
 
     // Gets the exact instruction we need to compute
     EXACT_INSTRUCTION inst = stages[StageType::EX].getExactInstruction();

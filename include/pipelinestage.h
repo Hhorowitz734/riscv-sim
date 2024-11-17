@@ -35,7 +35,7 @@ public:
     
     // Getters NEED TO UPDATE THESE FOR MEMORY SAFETY
     StageType getStageType() const;
-    std::vector<uint32_t> getDependencies() const; // Protect these from segfaults
+    std::unordered_map<DEPENDENCY_TYPE, uint32_t> getDependencies() const; // Protect these from segfaults
     uint32_t getDestination() const;
     int32_t getImmediate() const;
     EXACT_INSTRUCTION getExactInstruction() const;
@@ -50,6 +50,9 @@ public:
     void setResult(int32_t newResult); // for setting the result of a computation in ex stage
     int32_t getResult() const;
 
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> getRegisterValues() const;
+    void setRegisterValue(DEPENDENCY_TYPE reg, int32_t newValue);
+    
     // for seetting memory address for store
     void setMemAddress(uint32_t newAddress);
     uint32_t getMemAddress() const;

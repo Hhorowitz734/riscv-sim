@@ -58,7 +58,7 @@ bool PipelineStage::isEmpty() const { return curr_instruction == nullptr; }
 // GETTERS
 
 StageType PipelineStage::getStageType() const { return type; }
-std::vector<uint32_t> PipelineStage::getDependencies() const { return curr_instruction->getDependencies(); } // Protect these from segfaults
+std::unordered_map<DEPENDENCY_TYPE, uint32_t> PipelineStage::getDependencies() const { return curr_instruction->getDependencies(); } // Protect these from segfaults
 uint32_t PipelineStage::PipelineStage::getDestination() const { return curr_instruction->getDestination(); }
 int32_t PipelineStage::getImmediate() const { return curr_instruction->getImmediate(); }
 EXACT_INSTRUCTION PipelineStage::getExactInstruction() const { return curr_instruction->getExactInstruction(); }
@@ -90,6 +90,29 @@ int32_t PipelineStage::getResult() const {
 
     return curr_instruction->getResult();
 }
+
+std::unordered_map<DEPENDENCY_TYPE, int32_t> PipelineStage::getRegisterValues() const { 
+
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> nonelol;
+
+    if (isEmpty()) {
+        std::cerr << "Cannot get register value of empty instruction." << std::endl;
+        return nonelol;
+    }
+
+    return curr_instruction->getRegisterValues();
+}
+
+void PipelineStage::setRegisterValue(DEPENDENCY_TYPE reg, int32_t newValue) { 
+
+    if (isEmpty()) {
+        std::cerr << "Cannot set register value of empty instruction." << std::endl;
+        return;
+    }
+
+    curr_instruction->setRegisterValue(reg, newValue);
+}
+    
 
 void PipelineStage::setMemAddress(uint32_t newAddress) {
 

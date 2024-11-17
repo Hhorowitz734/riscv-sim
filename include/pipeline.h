@@ -136,14 +136,26 @@ public:
 
     // Pipeline stage methods
     void ISAction(); //Simulates an instruction fetch
+    void instructionDecode(); // Simulates ID stage
+    void registerFetch(); // Simulates RF stage
+
+    // Helper specific functions for RF stage
+    void registerFetchJType();
+    void registerFetchLoadStore();
+    void registerFetchRType();
+    void registerFetchIRR();
+    void registerFetchBranch();
+
+
     void executeInstruction(); // Performs computation currently in EX stage
     void dataStore(); // Simulates DS stage
     void writeBack(); // Simulates WB stage
 
 
+
     // For executing instructions by type
-    void executeIRR();
-    void executeRType();
+    void executeIRR(); // RENAME THIS
+    void executeRType(); // RENAME THIS
     void executeLoad();
     void executeStore();
     void executeJType();
