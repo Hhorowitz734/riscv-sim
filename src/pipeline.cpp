@@ -5,11 +5,11 @@ Pipeline::Pipeline() {
     // Initialize the 8 pipeline stages
     stages[StageType::IF] = PipelineStage(StageType::IF);
     stages[StageType::IS] = PipelineStage(StageType::IS);
-    stages[StageType::ID] = PipelineStage(StageType::ID);
     stages[StageType::RF] = PipelineStage(StageType::RF);
     stages[StageType::EX] = PipelineStage(StageType::EX);
     stages[StageType::DF] = PipelineStage(StageType::DF);
     stages[StageType::DS] = PipelineStage(StageType::DS);
+    stages[StageType::TC] = PipelineStage(StageType::TC);
     stages[StageType::WB] = PipelineStage(StageType::WB);
 
     // Initialize the 32 integer registers
@@ -30,19 +30,27 @@ Pipeline::Pipeline() {
 /**
  * FOR ADVANCING THE PIPELINE
  */
-void Pipeline::sendNextInstruction() {
+bool Pipeline::sendNextInstruction() {
     /**
      * Takes an instruction from "instructions" vector
      * Sends it to IF pipeline stage
      */
 
-    if (stages[StageType::IF].isEmpty()) {
-        stages[StageType::IF].setInstruction(std::make_unique<Instruction>(instruction_map[pc]));
+    auto it = instruction_map.find(pc); // Check if the key exists in the map
+    if (it != instruction_map.end()) { // Key exists
+        if (stages[StageType::IF].isEmpty()) {
+            stages[StageType::IF].setInstruction(std::make_unique<Instruction>(it->second));
+            return true;
+        } else {
+            std::cerr << "Error: IF stage is full.\n";
+            return true;
+        }
     } else {
-        std::cerr << "Error: IF stage is full.\n";
+        std::cerr << "Error: Instruction for pc not found.\n";
+        return false; // returns false if program is at end
     }
-
 }
+
 
 void Pipeline::comprehensiveAdvance() {
     /**
@@ -58,18 +66,23 @@ void Pipeline::comprehensiveAdvance() {
      * Then, write its result to memory
      */
 
+    bool endFlag = false; // flag to end program
+
     pc += 4;
     pipeline_registers.npc = pc + 4;
 
     advanceInstruction(WB, WB, true);
-    advanceInstruction(DS, WB);
+    advanceInstruction(TC, WB);
+    advanceInstruction(DS, TC);
     advanceInstruction(DF, DS);
     advanceInstruction(EX, DF);
     advanceInstruction(RF, EX);
-    advanceInstruction(ID, RF);
-    advanceInstruction(IS, ID);
+    advanceInstruction(IS, RF);
     advanceInstruction(IF, IS);
-    sendNextInstruction();
+
+    if (sendNextInstruction() == false && allPipelineStagesEmpty()) { // sendNextInstruction is false iff next pc has no instruction to send (not just if IF is full)
+        endFlag = true;
+    }
 
     // Perform pipeline actions
     ISAction();
@@ -80,6 +93,11 @@ void Pipeline::comprehensiveAdvance() {
 
 
     curr_cycle++;
+
+    if (endFlag) { 
+        std::cout << getCycleOutput();
+        exit(0); 
+    }
     
 }
 
@@ -106,8 +124,24 @@ void Pipeline::advanceInstruction(StageType from, StageType to, bool deallocate)
         return;
     }
 
+    stages[from].resetState();
 
     stages[to].setInstruction(std::move(stages[from].getInstruction()));
+
+}
+
+bool Pipeline::allPipelineStagesEmpty() {
+
+    if (stages[IF].isEmpty() &&
+        stages[IS].isEmpty() &&
+        stages[RF].isEmpty() &&
+        stages[EX].isEmpty() &&
+        stages[DF].isEmpty() &&
+        stages[DS].isEmpty() &&
+        stages[TC].isEmpty() &&
+        stages[WB].isEmpty()) { return true; }
+
+    return false;
 
 }
 
@@ -519,11 +553,11 @@ std::string Pipeline::getPipelineStatusOutput() {
     // Iterate through the stages and append their state to the output
     output += stages[StageType::IF].getState();
     output += stages[StageType::IS].getState();
-    output += stages[StageType::ID].getState();
     output += stages[StageType::RF].getState();
     output += stages[StageType::EX].getState();
     output += stages[StageType::DF].getState();
     output += stages[StageType::DS].getState();
+    output += stages[StageType::TC].getState();
     output += stages[StageType::WB].getState();
 
     return output;
@@ -616,12 +650,12 @@ std::string Pipeline::getStalledInstruction() {
     }
 
     // Handle a potential error
-    if (stages[StageType::ID].isEmpty()) {
+    if (stages[StageType::RF].isEmpty()) {
         std::cerr << "Stall not possible as ID slot is empty" << std::endl;
         exit(1);
     }
 
-    output += stages[StageType::ID].getInstructionString();
+    output += stages[StageType::RF].getInstructionString();
     
     return output;
 }

@@ -57,14 +57,10 @@ int main(int argc, char* argv[]) {
     //std::cout << pipeline->getCycleOutput();
     //pipeline->comprehensiveAdvance();
 
-    pipeline->comprehensiveAdvance();
-    
-    pipeline->comprehensiveAdvance();
-
-    pipeline->comprehensiveAdvance();
-    pipeline->comprehensiveAdvance();
-    pipeline->comprehensiveAdvance();
-    std::cout << pipeline->getCycleOutput();
+    while (true) {
+        pipeline->comprehensiveAdvance();
+        std::cout << pipeline->getCycleOutput();
+    }
 
     return 0;
 }	

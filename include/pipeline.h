@@ -127,9 +127,10 @@ public:
     Pipeline();
 
     // Pipeline advancing methods
-    void sendNextInstruction();
+    bool sendNextInstruction(); // false if no new instruction to send (ie at end)
     void comprehensiveAdvance();
     void advanceInstruction(StageType from, StageType to, bool deallocate = false);
+    bool allPipelineStagesEmpty();
 
 
 

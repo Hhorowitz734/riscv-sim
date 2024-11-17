@@ -76,10 +76,21 @@ INST_TYPE PipelineStage::getInstructionType() {
 // Get and set current state
 void PipelineStage::setState(std::string updatedState) { state = "* " + getStageName() + " : " + updatedState + "\n"; }
 std::string PipelineStage::getState() const { return state; }
+void PipelineStage::resetState() { setState("NOP"); }
 
 void PipelineStage::updateStatus() {
 
-    // Handled elsewhere
+    // Handle IF
+    if (type == IF && !isEmpty()) {
+        setState("<unknown>");
+        return;
+    }
+    if (type == IF && isEmpty()) {
+        setState("NOP");
+        return;
+    }
+
+    // Handle IS
     if (type == IF || type == IS) { return; }
 
     if (isEmpty()) { setState("NOP"); }
@@ -98,11 +109,11 @@ std::string PipelineStage::getStageName() const {
     switch (type) {
         case IF: return "IF";
         case IS: return "IS";
-        case ID: return "ID";
         case RF: return "RF";
         case EX: return "EX";
         case DF: return "DF";
         case DS: return "DS";
+        case TC: return "TC";
         case WB: return "WB";
         default: return "Unknown";
     }

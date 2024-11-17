@@ -10,11 +10,11 @@
 enum StageType {
     IF, // Instruction Fetch (1/2)
     IS, // Instruction Fetch (2/2)
-    ID, // Instruction Decode, Hazard Check
     RF, // Register Fetch
     EX, // Execution
     DF, // Data Fetch (1/2)
     DS, // Data Fetch (2/2)
+    TC,
     WB  // Write Back
 };
 
@@ -51,6 +51,7 @@ public:
     // Get and set current state
     void setState(std::string updatedState);
     std::string getState() const;
+    void resetState();
 
     void updateStatus();
 
