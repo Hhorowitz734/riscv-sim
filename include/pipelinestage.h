@@ -15,7 +15,9 @@ enum StageType {
     EX, // Execution
     DF, // Data Fetch (1/2)
     DS, // Data Fetch (2/2)
-    WB  // Write Back
+    WB,  // Write Back
+
+    NONE // Dummy type
 };
 
 class PipelineStage {
@@ -69,6 +71,7 @@ public:
     // Utility functions
     std::string getStageName() const;
     std::string getInstructionString(); // Get instruction string
+    std::string getNewStyleIstring() const;
 
     
 

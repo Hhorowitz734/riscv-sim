@@ -39,6 +39,7 @@ struct PipelineRegisters {
 struct Flags {
 
     bool isStalled = false; //Means that the instruction in ID stage is stalled
+    int stallsRemaining = 0;
 
     Flags() = default;
 
@@ -137,6 +138,12 @@ public:
     // Pipeline stage methods
     void ISAction(); //Simulates an instruction fetch
     void instructionDecode(); // Simulates ID stage
+
+    // Stall Checks
+    StageType checkDataHazard(DEPENDENCY_TYPE reg, uint32_t register_dependency);
+    StageType checkRAWHazard(DEPENDENCY_TYPE reg, uint32_t register_dependency);
+
+
     void registerFetch(); // Simulates RF stage
 
     // Helper specific functions for RF stage
@@ -150,6 +157,8 @@ public:
     void executeInstruction(); // Performs computation currently in EX stage
     void dataStore(); // Simulates DS stage
     void writeBack(); // Simulates WB stage
+
+    void handleStalledState();
 
 
 

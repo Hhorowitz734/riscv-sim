@@ -71,12 +71,15 @@ void Pipeline::comprehensiveAdvance() {
     pc += 4;
     pipeline_registers.npc = pc + 4;
 
+    handleStalledState();
+
     advanceInstruction(WB, WB, true);
     advanceInstruction(DS, WB);
     advanceInstruction(DF, DS);
     advanceInstruction(EX, DF);
     advanceInstruction(RF, EX);
-    advanceInstruction(IS, RF);
+    if (!flags.isStalled) { advanceInstruction(ID, RF); }
+    advanceInstruction(IS, ID);
     advanceInstruction(IF, IS);
 
     if (sendNextInstruction() == false && allPipelineStagesEmpty()) { // sendNextInstruction is false iff next pc has no instruction to send (not just if IF is full)
@@ -85,10 +88,11 @@ void Pipeline::comprehensiveAdvance() {
 
     // Perform pipeline actions
     ISAction();
+    instructionDecode();
     registerFetch();
     executeInstruction();
-    writeBack();
     dataStore();
+    writeBack();
 
 
    
@@ -98,6 +102,7 @@ void Pipeline::comprehensiveAdvance() {
 
     if (endFlag) { 
         std::cout << getCycleOutput();
+        std::cout << "Program ended in comprehensiveAdvance()" << std::endl;
         exit(0); 
     }
     
@@ -113,6 +118,8 @@ void Pipeline::advanceInstruction(StageType from, StageType to, bool deallocate)
     // Here, to is irrelevant
     if (deallocate) { 
         stages[from].deallocateInstruction(); 
+        stages[from].resetState();
+        if (flags.isStalled) { stages[from].setState("**STALL**"); }
         return;
     }
 
@@ -126,7 +133,8 @@ void Pipeline::advanceInstruction(StageType from, StageType to, bool deallocate)
         return;
     }
 
-    stages[from].resetState();
+    if (flags.isStalled && from != IF && from != IS) { stages[from].setState("**STALL**"); }
+    else { stages[from].resetState(); }
 
     stages[to].setInstruction(std::move(stages[from].getInstruction()));
 
@@ -194,7 +202,173 @@ void Pipeline::instructionDecode() {
      * I WILL SKIP THIS FOR NOW
      */
 
+    //Check type of instruction in ID state
+
+    if (stages[StageType::ID].isEmpty()) {
+        std::cerr << "Cannot decode empty instruction." << std::endl;
+        return;
+    }
+
+    if (flags.isStalled) { return; } // No need to check again
+
+    EXACT_INSTRUCTION instruction = stages[StageType::ID].getExactInstruction();
+
+    // Flags for if they can have a dependency in rs1, rs2, or both
+    bool flag_dep1 = false;
+    bool flag_dep2 = false;
+    StageType dep1;
+    StageType dep2;
+
+    std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::ID].getDependencies();
+
+    // Number of cycles to stall if we hit a RAW hazard
+    std::unordered_map<StageType, int> cycles_to_stall_raw = {
+        {DS, 2},
+        {DF, 3},
+        {EX, 4},
+        {RF, 5}
+    };
+
+    switch(instruction) {
+        case LW: //Can only have a RAW hazard in rs1
+        case ADDI:
+        case SLTI:
+        case JALR_E:
+        case SW:
+            flag_dep1 = true;
+            dep1 = checkRAWHazard(RS1, dependencies[RS1]);
+            break;
+        case ADD: // Can have RAW hazards in rs1 and rs2
+        case SUB:
+        case SLT:
+        case SLL:
+        case SRL:
+        case OR:
+        case XOR:
+        case BEQ:
+        case BGE:
+        case BNE:
+        case BLT:
+            flag_dep1 = true;
+            flag_dep2 = true;
+            dep1 = checkRAWHazard(RS1, dependencies[RS1]);
+            dep2 = checkRAWHazard(RS2, dependencies[RS2]);
+            break;
+        default: //stuff like NOP which has neither
+            return;
+       
+            
+        
+
+    }
+
+    bool flag_load_dep = false; //flag to check for load dependency (only 1 cycle)
+    int num_cycle_stall_1 = 0;
+    int num_cycle_stall_2 = 0;
+    int num_cycle_stall = 0;
+
+    if (flag_dep1 && dep1 != NONE) {
+
+        // Only 1 cycle if LW
+        if (stages[dep1].getExactInstruction() == LW) { num_cycle_stall_1 = 1; }
+
+        else {num_cycle_stall_1 = cycles_to_stall_raw[dep1]; }
+
+    }
+
+    if (flag_dep2 && dep2 != NONE) {
+
+        // Only 1 cycle if LW
+        if (stages[dep2].getExactInstruction() == LW) { num_cycle_stall_2 = 1; }
+
+        else {num_cycle_stall_2 = cycles_to_stall_raw[dep2]; }
+
+    }
+
+    num_cycle_stall = std::max(num_cycle_stall_1, num_cycle_stall_2);
+    
+    if (num_cycle_stall > 0) { 
+
+        std::cout << "Will stall for " << num_cycle_stall << " cycles." << std::endl; 
+
+        // Turn on stalled mode
+        flags.isStalled = true;
+        flags.stallsRemaining = num_cycle_stall;
+        
+    }
+    
+
     return;
+}
+
+StageType Pipeline::checkDataHazard(DEPENDENCY_TYPE reg, uint32_t register_dependency) {
+    /**
+     * Checks for a data hazard in reg register (RS1, RS2)
+     */
+
+    return NONE;
+
+}
+
+StageType Pipeline::checkRAWHazard(DEPENDENCY_TYPE reg, uint32_t register_dependency) {
+
+    uint32_t result_register;
+
+    // So we can iterate front to back to get soonest data hazard
+    std::vector<StageType> stageOrder = {
+        StageType::RF,
+        StageType::EX,
+        StageType::DF,
+        StageType::DS
+    };
+
+
+    // Iterate in the specified order
+    for (StageType stageType : stageOrder) {
+
+        // Find next stage in map
+        auto it = stages.find(stageType);
+        const PipelineStage& pipelineStage = it->second;
+
+        if (pipelineStage.isEmpty()) { continue; }
+
+        // Depends on instruction
+        EXACT_INSTRUCTION stageInstruction = pipelineStage.getExactInstruction();
+
+
+        switch (stageInstruction) {
+            
+            // 1. R-Type instructions, IRR Type, LW, 
+            case SLT:
+            case SLL:
+            case SRL:
+            case SUB:
+            case ADD:
+            case NOP:
+            case AND:
+            case OR:
+            case XOR:
+            case ADDI:
+            case SLTI:
+                result_register = pipelineStage.getDestination();
+                if (register_dependency == result_register) { return stageType; } // A dependency exists
+                break;
+            case LW: //LW writes in EX stage
+                result_register = pipelineStage.getDestination();
+                if (register_dependency == result_register && stageType == RF) { return stageType; }
+                break;
+            // 2. Since JAL and JALR write in EX, they can only cause a hazard in EX
+            default: // BRANCH type, RET, NOP, SW
+                break;
+
+
+        }
+
+       
+    }
+
+    return NONE;
+
 }
 
 
@@ -487,6 +661,25 @@ void Pipeline::writeBack() {
 
 }
 
+void Pipeline::handleStalledState() {
+
+    // Just return out if not stalled
+    if (!flags.isStalled) { return; }
+
+    // Cancel stall if no stall remaining
+    if (flags.stallsRemaining == 0) {
+        flags.isStalled = false;
+        return;
+    }
+
+    flags.stallsRemaining -= 1;
+
+    return;
+}
+
+
+
+
 void Pipeline::executeIRR() {
 
     // ADDI, SLTI, NOP
@@ -743,17 +936,17 @@ std::string Pipeline::getCycleOutput() {
     // Stall Instruction
     output << "\n" << getStalledInstruction();
 
-    output << "\n" << forwarding.toString() << "\n";
+    //output << "\n" << forwarding.toString() << "\n";
 
     // Pipeline Registers
-    output << "\n" << getPipelineRegistersOutput() << "\n";
+    //output << "\n" << getPipelineRegistersOutput() << "\n";
 
     // Integer Registers
-    output << getIntegerRegistersOutput() << "\n";
+    //output << getIntegerRegistersOutput() << "\n";
 
-    output << getDataMemoryOutput() << "\n";
+    //output << getDataMemoryOutput() << "\n";
 
-    output << stats.toString();
+    //output << stats.toString();
 
     output << "\n\n";
 
@@ -864,12 +1057,12 @@ std::string Pipeline::getStalledInstruction() {
     }
 
     // Handle a potential error
-    if (stages[StageType::RF].isEmpty()) {
+    if (stages[StageType::ID].isEmpty()) {
         std::cerr << "Stall not possible as ID slot is empty" << std::endl;
         exit(1);
     }
 
-    output += stages[StageType::RF].getInstructionString();
+    output += stages[StageType::ID].getNewStyleIstring();
     
     return output;
 }

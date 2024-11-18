@@ -205,3 +205,13 @@ std::string PipelineStage::getInstructionString() {
     
 }
 
+
+std::string PipelineStage::getNewStyleIstring() const {
+
+    if (curr_instruction) {
+        return new_style_istring;
+    } 
+
+    return "NOP\n";
+
+}
