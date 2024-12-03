@@ -63,15 +63,27 @@ uint32_t PipelineStage::PipelineStage::getDestination() const { return curr_inst
 int32_t PipelineStage::getImmediate() const { return curr_instruction->getImmediate(); }
 EXACT_INSTRUCTION PipelineStage::getExactInstruction() const { return curr_instruction->getExactInstruction(); }
 uint32_t PipelineStage::getValue() const { return curr_instruction->getValue(); }
-void PipelineStage::deallocateInstruction() { curr_instruction.reset(); }
+void PipelineStage::deallocateInstruction() { 
+    if (type != WB) { setState("**STALL**"); }
+    curr_instruction.reset(); 
+}
 std::unique_ptr<Instruction>& PipelineStage::getInstruction() { return curr_instruction; }
+
+Instruction PipelineStage::getInstructionCopy() const {
+
+    Instruction dummy;
+
+    if (!curr_instruction) {
+        std::cerr << "Cannot return copy of non-existant instruction." << std::endl;
+        return dummy;
+    }
+
+    return *curr_instruction;
+
+}
 
 void PipelineStage::setResult(int32_t newResult) {
 
-    if (type != EX) {
-        std::cerr << "Should not be setting a result outside of EX stage." << std::endl;
-        return;
-    }
 
     if (isEmpty()) {
         std::cerr << "Cannot set result of empty instruction." << std::endl;
@@ -140,6 +152,29 @@ uint32_t PipelineStage::getMemAddress() const {
     return curr_instruction->getMemAddress();
 
 }
+
+
+void PipelineStage::setNeedsForward(bool newFlag) {
+
+    if (isEmpty()) {
+        std::cerr << "Cannot set flag of empty instruction." << std::endl;
+        return;
+    }
+
+    curr_instruction->setForwardFlag(newFlag);
+}
+
+bool PipelineStage::getNeedsForward() const {
+
+    if (isEmpty()) {
+        std::cerr << "Cannot get flag of empty instruction." << std::endl;
+        return false;
+    }
+
+    return curr_instruction->getForwardFlag();
+}
+
+
 
 INST_TYPE PipelineStage::getInstructionType() {
     if (!isEmpty()) { return curr_instruction->getInstType(); }

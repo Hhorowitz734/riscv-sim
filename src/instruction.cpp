@@ -534,3 +534,31 @@ std::string handle_special_case(Instruction inst, EXACT_INSTRUCTION type, int po
     return ss.str();
 
 }
+
+
+std::string instruction_to_new_style_string(Instruction inst) {
+
+    // Result of the function fixes the istring
+
+    std::string input = instruction_to_string(inst, 500, false);
+
+    // Remove trailing newline, if it exists
+    if (!input.empty() && input.back() == '\n') {
+        input.pop_back();
+    }
+
+    input = std::regex_replace(input, std::regex(R"(x(\d+))"), "R$1");
+
+    // Replace immediate values with "#" prefix
+    if (inst.getExactInstruction() != LW && inst.getExactInstruction() != SW) {
+        input = std::regex_replace(input, std::regex(R"(\b(\d+)\b)"), "#$1");
+    }
+
+    // Remove everything before the last tab
+    size_t lastTab = input.find_last_of('\t');
+    if (lastTab != std::string::npos) {
+        input = input.substr(lastTab + 1);
+    }
+
+    return input;
+}

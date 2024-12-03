@@ -68,8 +68,10 @@ void Pipeline::comprehensiveAdvance() {
 
     bool endFlag = false; // flag to end program
 
-    pc += 4;
-    pipeline_registers.npc = pc + 4;
+    if (!flags.isRAWStalled) {
+        pc += 4;
+        pipeline_registers.npc = pc + 4;
+    }
 
     handleStalledState();
 
@@ -78,7 +80,7 @@ void Pipeline::comprehensiveAdvance() {
     advanceInstruction(DF, DS);
     advanceInstruction(EX, DF);
     advanceInstruction(RF, EX);
-    if (!flags.isStalled) { advanceInstruction(ID, RF); }
+    if (!flags.isRAWStalled) { advanceInstruction(ID, RF); }
     advanceInstruction(IS, ID);
     advanceInstruction(IF, IS);
 
@@ -119,7 +121,13 @@ void Pipeline::advanceInstruction(StageType from, StageType to, bool deallocate)
     if (deallocate) { 
         stages[from].deallocateInstruction(); 
         stages[from].resetState();
-        if (flags.isStalled) { stages[from].setState("**STALL**"); }
+        if (flags.isRAWStalled || flags.isBranchStalled) { stages[from].setState("**STALL**"); }
+        return;
+    }
+
+    if (stages[from].isEmpty()) {
+        if (flags.isBranchStalled) { stages[to].setState("**STALL**"); }
+        std::cerr << "Cannot send from " << stages[from].getStageName() << " because " << stages[from].getStageName() << " is empty." << std::endl;
         return;
     }
 
@@ -128,12 +136,9 @@ void Pipeline::advanceInstruction(StageType from, StageType to, bool deallocate)
         return;
     }
 
-    if (stages[from].isEmpty()) {
-        std::cerr << "Cannot send from " << stages[from].getStageName() << " because " << stages[from].getStageName() << " is empty." << std::endl;
-        return;
-    }
+    
 
-    if (flags.isStalled && from != IF && from != IS) { stages[from].setState("**STALL**"); }
+    if (flags.isRAWStalled && from != IF && from != IS) { stages[from].setState("**STALL**"); }
     else { stages[from].resetState(); }
 
     stages[to].setInstruction(std::move(stages[from].getInstruction()));
@@ -209,7 +214,7 @@ void Pipeline::instructionDecode() {
         return;
     }
 
-    if (flags.isStalled) { return; } // No need to check again
+    if (flags.isRAWStalled) { return; } // No need to check again
 
     EXACT_INSTRUCTION instruction = stages[StageType::ID].getExactInstruction();
 
@@ -234,7 +239,6 @@ void Pipeline::instructionDecode() {
         case ADDI:
         case SLTI:
         case JALR_E:
-        case SW:
             flag_dep1 = true;
             dep1 = checkRAWHazard(RS1, dependencies[RS1]);
             break;
@@ -249,6 +253,7 @@ void Pipeline::instructionDecode() {
         case BGE:
         case BNE:
         case BLT:
+        case SW:
             flag_dep1 = true;
             flag_dep2 = true;
             dep1 = checkRAWHazard(RS1, dependencies[RS1]);
@@ -262,28 +267,21 @@ void Pipeline::instructionDecode() {
 
     }
 
+    if (flag_dep1 && dep1 != NONE) { addDetectedForward(ID, dep1, RS1); }
+    if (flag_dep2 && dep2 != NONE) { addDetectedForward(ID, dep2, RS2); }
+
+
+    
+    return; // temporarily rid of RAW stalls
+
     bool flag_load_dep = false; //flag to check for load dependency (only 1 cycle)
     int num_cycle_stall_1 = 0;
     int num_cycle_stall_2 = 0;
     int num_cycle_stall = 0;
 
-    if (flag_dep1 && dep1 != NONE) {
+    if (flag_dep1 && dep1 != NONE) { num_cycle_stall_1 = cycles_to_stall_raw[dep1]; }
 
-        // Only 1 cycle if LW
-        if (stages[dep1].getExactInstruction() == LW) { num_cycle_stall_1 = 1; }
-
-        else {num_cycle_stall_1 = cycles_to_stall_raw[dep1]; }
-
-    }
-
-    if (flag_dep2 && dep2 != NONE) {
-
-        // Only 1 cycle if LW
-        if (stages[dep2].getExactInstruction() == LW) { num_cycle_stall_2 = 1; }
-
-        else {num_cycle_stall_2 = cycles_to_stall_raw[dep2]; }
-
-    }
+    if (flag_dep2 && dep2 != NONE) { num_cycle_stall_2 = cycles_to_stall_raw[dep2]; }
 
     num_cycle_stall = std::max(num_cycle_stall_1, num_cycle_stall_2);
     
@@ -292,8 +290,8 @@ void Pipeline::instructionDecode() {
         std::cout << "Will stall for " << num_cycle_stall << " cycles." << std::endl; 
 
         // Turn on stalled mode
-        flags.isStalled = true;
-        flags.stallsRemaining = num_cycle_stall;
+        flags.isRAWStalled = true;
+        flags.RAWstallsRemaining = num_cycle_stall;
         
     }
     
@@ -350,13 +348,11 @@ StageType Pipeline::checkRAWHazard(DEPENDENCY_TYPE reg, uint32_t register_depend
             case XOR:
             case ADDI:
             case SLTI:
+            case LW:
                 result_register = pipelineStage.getDestination();
                 if (register_dependency == result_register) { return stageType; } // A dependency exists
                 break;
-            case LW: //LW writes in EX stage
-                result_register = pipelineStage.getDestination();
-                if (register_dependency == result_register && stageType == RF) { return stageType; }
-                break;
+            
             // 2. Since JAL and JALR write in EX, they can only cause a hazard in EX
             default: // BRANCH type, RET, NOP, SW
                 break;
@@ -369,6 +365,34 @@ StageType Pipeline::checkRAWHazard(DEPENDENCY_TYPE reg, uint32_t register_depend
 
     return NONE;
 
+}
+
+
+
+void Pipeline::addDetectedForward(StageType to, StageType from, DEPENDENCY_TYPE dep) {
+
+    forwarding.setDetected(true);
+
+    Instruction from_instruction = stages[from].getInstructionCopy();
+    Instruction to_instruction = stages[to].getInstructionCopy();
+
+    stages[to].setNeedsForward(true);
+
+    forwarding.addForward(from_instruction, to_instruction, 1); // FIX FIX !!
+
+    
+
+}
+
+
+
+
+void Pipeline::cancelInstruction(StageType stage) {
+    /**
+     * Cancels an instruction, for a JAL or BRANCH stall for example
+     */
+    if (flags.isBranchStalled) { stages[stage].setState("**STALL**"); }
+    stages[stage].deallocateInstruction();
 }
 
 
@@ -395,7 +419,7 @@ void Pipeline::registerFetch() {
             return registerFetchBranch();
         case LOAD:
         case STORE:
-            return registerFetchJType();
+            return registerFetchLoadStore();
         default:
             return;
 
@@ -628,10 +652,21 @@ void Pipeline::dataStore() {
     EXACT_INSTRUCTION instruction_type = stages[StageType::DS].getExactInstruction();
 
     // Assumption: Only SW instructions use the DS stage
-    if (instruction_type != SW) { return; }
+    if (instruction_type != SW && instruction_type != LW) { return; }
 
-    setDataMemory(stages[StageType::DS].getMemAddress()
-                ,stages[StageType::DS].getResult());
+    if (instruction_type == SW) {
+
+        setDataMemory(stages[StageType::DS].getMemAddress()
+                    ,stages[StageType::DS].getResult());
+        return;
+    }
+
+    //LOAD -> set result as retrieved data
+    int32_t retrieved_data = getDataMemory(stages[StageType::DS].getMemAddress());
+    stages[StageType::DS].setResult(retrieved_data);
+
+    return; 
+
 
 
 }
@@ -652,6 +687,7 @@ void Pipeline::writeBack() {
     switch(instruction_type) {
         case I_TYPE: // ADDI, SLTI
         case IRR:
+        case LOAD:
             destination = stages[StageType::WB].getDestination();
             destination_register = "R" + std::to_string(destination);
             integer_registers[destination_register] = stages[StageType::WB].getResult();
@@ -664,15 +700,24 @@ void Pipeline::writeBack() {
 void Pipeline::handleStalledState() {
 
     // Just return out if not stalled
-    if (!flags.isStalled) { return; }
+    if (!flags.isRAWStalled && !flags.isBranchStalled) { return; }
 
     // Cancel stall if no stall remaining
-    if (flags.stallsRemaining == 0) {
-        flags.isStalled = false;
-        return;
+    if (flags.RAWstallsRemaining == 0) {
+        flags.isRAWStalled = false;
+    } else {
+        flags.RAWstallsRemaining -= 1;
     }
 
-    flags.stallsRemaining -= 1;
+    if (flags.branchStallsRemaining == 0) {
+        flags.isBranchStalled = false;
+    } else {
+        flags.branchStallsRemaining -= 1;
+    }
+
+    return;
+
+    
 
     return;
 }
@@ -779,9 +824,13 @@ void Pipeline::executeLoad() {
         return; // Early return or handle error
     }
 
-    int32_t retrieved_data = getDataMemory(memory_address);
+    stages[StageType::EX].setMemAddress(memory_address);
 
-    integer_registers[destination_register] = retrieved_data;
+    return;
+
+    //int32_t retrieved_data = getDataMemory(memory_address);
+
+    //integer_registers[destination_register] = retrieved_data;
     
 }
 
@@ -823,11 +872,34 @@ void Pipeline::executeJType() {
         case JAL_E:
             integer_registers[destination_register] = pipeline_registers.npc;
             pc += offset;
+            pc -= 4; // to account for advancing at beginning of each cycle
+
+            flags.branchStallsRemaining = 8;
+            flags.isBranchStalled = true;
+
+            // Cancel all instructions prior to jump
+            cancelInstruction(IF);
+            cancelInstruction(IS);
+            cancelInstruction(ID);
+            cancelInstruction(RF);
+            
+
             return;
         case JALR_E: //check this
             base_address = register_values[RS1];
             integer_registers[destination_register] = pipeline_registers.npc;
             pc = (base_address + offset) & ~1;
+            pc -= 4; // to account for advancing at beginning of each cycle
+
+            flags.branchStallsRemaining = 8;
+            flags.isBranchStalled = true;
+
+            // Cancel all instructions prior to jump
+            cancelInstruction(IF);
+            cancelInstruction(IS);
+            cancelInstruction(ID);
+            cancelInstruction(RF);
+
             return;
         default:
             return;
@@ -868,8 +940,21 @@ void Pipeline::executeBranch() {
             return;
     }
 
-    // If condition is met, take the branch
-    if (takeBranch) { pc += offset; }
+    // If condition is not met, don't take the branch
+    if (!takeBranch) { return; }
+    
+    pc += offset;
+    pc -= 4; //to account for auto advancing
+
+
+    flags.branchStallsRemaining = 8;
+    flags.isBranchStalled = true;
+
+    // Cancel all instructions prior to jump
+    cancelInstruction(IF);
+    cancelInstruction(IS);
+    cancelInstruction(ID);
+    cancelInstruction(RF);
 
     return;
 
@@ -936,17 +1021,17 @@ std::string Pipeline::getCycleOutput() {
     // Stall Instruction
     output << "\n" << getStalledInstruction();
 
-    //output << "\n" << forwarding.toString() << "\n";
+    output << "\n" << forwarding.toString() << "\n";
 
     // Pipeline Registers
-    //output << "\n" << getPipelineRegistersOutput() << "\n";
+    output << "\n" << getPipelineRegistersOutput() << "\n";
 
     // Integer Registers
-    //output << getIntegerRegistersOutput() << "\n";
+    output << getIntegerRegistersOutput() << "\n";
 
-    //output << getDataMemoryOutput() << "\n";
+    output << getDataMemoryOutput() << "\n";
 
-    //output << stats.toString();
+    output << stats.toString();
 
     output << "\n\n";
 
@@ -1051,7 +1136,7 @@ std::string Pipeline::getStalledInstruction() {
     std::string output = "Stall Instruction: ";
 
     // No stalled
-    if (!flags.isStalled) { 
+    if (!flags.isRAWStalled) { 
         output += "(none)\n";
         return output;
     }

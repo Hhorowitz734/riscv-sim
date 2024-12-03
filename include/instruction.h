@@ -9,6 +9,8 @@
 #include <iomanip>
 #include <vector>
 #include <unordered_map>
+#include <regex>
+
 
 
 // Extra datatypes
@@ -89,6 +91,15 @@ struct Instruction {
 
     std::unordered_map<DEPENDENCY_TYPE, int32_t> getRegisterValues() const { return registerValues; }
     void setRegisterValue(DEPENDENCY_TYPE reg, int32_t newValue) { registerValues[reg] = newValue; }
+
+    /**
+     * Flag that the instruction needs forwarding.
+     */
+    bool needsForward = false;
+    void setForwardFlag(bool newFlag) {
+        needsForward = newFlag;
+    }
+    bool getForwardFlag() const { return needsForward; } 
     
 
         
@@ -153,6 +164,8 @@ struct Instruction {
     uint32_t getMemAddress() const { return mem_address_store; }
     void setMemAddress(uint32_t newAddress) { mem_address_store = newAddress; }
 
+    
+
 };
 
 
@@ -197,6 +210,6 @@ std::string register_to_string(Byte reg);
 std::string to_binary_string(Dword value, int bits);
 std::string instruction_to_string(Instruction inst, int position, bool isBlank);
 std::string handle_special_case(Instruction inst, EXACT_INSTRUCTION type, int position);
-
+std::string instruction_to_new_style_string(Instruction inst);
 
 #endif

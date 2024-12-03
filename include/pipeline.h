@@ -21,15 +21,15 @@ struct PipelineRegisters {
     uint32_t instruction_register = 0; //   [IS/ID.IR]
 
     // RF
-    int rf_regs_rs = 0; //RF's rs register  [RF/EX.A]
-    int rf_regs_rt = 0; //RF's rt register  [RF/EX.B]
+    int32_t rf_regs_rs = 0; //RF's rs register  [RF/EX.A]
+    int32_t rf_regs_rt = 0; //RF's rt register  [RF/EX.B]
 
     // EX
-    int alu_output = 0; // ALU output       [EX/DF.ALUout]
-    int forward_val = 0; // Forwarded value [EX/DF.B]
+    int32_t alu_output = 0; // ALU output       [EX/DF.ALUout]
+    int32_t forward_val = 0; // Forwarded value [EX/DF.B]
 
     // DS
-    int result_alu = 0; // ALU result/mem   [DS/WB.ALUout-LMD]
+    int32_t result_alu = 0; // ALU result/mem   [DS/WB.ALUout-LMD]
 
 
     PipelineRegisters() = default;
@@ -38,8 +38,11 @@ struct PipelineRegisters {
 
 struct Flags {
 
-    bool isStalled = false; //Means that the instruction in ID stage is stalled
-    int stallsRemaining = 0;
+    bool isRAWStalled = false; //Means that the instruction in ID stage is stalled
+    int RAWstallsRemaining = 0;
+
+    bool isBranchStalled = false;
+    int branchStallsRemaining = 0;
 
     Flags() = default;
 
@@ -88,6 +91,12 @@ struct Forwarding {
      */
 
     bool detected = false;
+    void setDetected(bool newDetected) {
+        detected = newDetected;
+    }
+    bool getDetected() const {
+        return detected;
+    }
     std::unordered_map<std::string, std::string> paths = {
         {"EX/DF -> RF/EX", "(none)"},
         {"DF/DS -> EX/DF", "(none)"},
@@ -96,16 +105,30 @@ struct Forwarding {
         {"DS/WB -> RF/EX", "(none)"}
     };
 
+    std::vector<std::pair<Instruction, Instruction>> pending_forwards;
+    // and when to actually complete them
+
 
     // Convert to string for output with fixed order
     std::string toString() const {
         std::ostringstream output;
 
         output << "Forwarding:\n";
-        output << " Detected: " << (detected ? "Yes" : "(none)") << "\n";
-        output << " Forwarded:\n";
+
+        if (pending_forwards.empty()) {
+            output << " Detected: (none)\n";
+        } else {
+            output << " Detected:\n";
+            for (size_t i = 0; i < pending_forwards.size(); ++i) {
+                const auto& [from, to] = pending_forwards[i];
+                output << "  [" << i << "] "
+                    << "(" << instruction_to_new_style_string(from) << ") to ("
+                    << instruction_to_new_style_string(to) << ")\n";
+            }
+        }
 
         // Fixed order of paths
+        output << " Forwarded:\n";
         output << " * EX/DF -> RF/EX : " << paths.at("EX/DF -> RF/EX") << "\n";
         output << " * DF/DS -> EX/DF : " << paths.at("DF/DS -> EX/DF") << "\n";
         output << " * DF/DS -> RF/EX : " << paths.at("DF/DS -> RF/EX") << "\n";
@@ -113,6 +136,17 @@ struct Forwarding {
         output << " * DS/WB -> RF/EX : " << paths.at("DS/WB -> RF/EX") << "\n";
 
         return output.str();
+    }
+
+
+
+    void addForward(Instruction from, Instruction to, int cycles_till_execution) {
+
+        pending_forwards.emplace_back(from, to);
+
+        // FIX FIX ?NOTE NOTE
+        
+
     }
 
 
@@ -143,6 +177,11 @@ public:
     StageType checkDataHazard(DEPENDENCY_TYPE reg, uint32_t register_dependency);
     StageType checkRAWHazard(DEPENDENCY_TYPE reg, uint32_t register_dependency);
 
+    void addDetectedForward(StageType to, StageType from, DEPENDENCY_TYPE dep);
+
+    // Cancelling instructions
+    void cancelInstruction(StageType stage);
+
 
     void registerFetch(); // Simulates RF stage
 
@@ -158,7 +197,7 @@ public:
     void dataStore(); // Simulates DS stage
     void writeBack(); // Simulates WB stage
 
-    void handleStalledState();
+    void handleStalledState(); // Handles stalled state
 
 
 

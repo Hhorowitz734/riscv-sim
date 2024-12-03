@@ -49,6 +49,8 @@ public:
     std::unique_ptr<Instruction>& getInstruction(); // !!!
     // DO NOT USE THIS EXCEPT TO MOVE!! 
 
+    Instruction getInstructionCopy() const;
+
     void setResult(int32_t newResult); // for setting the result of a computation in ex stage
     int32_t getResult() const;
 
@@ -58,6 +60,10 @@ public:
     // for seetting memory address for store
     void setMemAddress(uint32_t newAddress);
     uint32_t getMemAddress() const;
+
+    // Get and set needs forward flag
+    void setNeedsForward(bool newFlag);
+    bool getNeedsForward() const;
 
 
     // Get and set current state
