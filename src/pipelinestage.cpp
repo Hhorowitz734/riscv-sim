@@ -176,6 +176,30 @@ bool PipelineStage::getNeedsForward() const {
 
 
 
+void PipelineStage::setNumCyclesAhead(DEPENDENCY_TYPE dep, int newNumCyclesAhead) {
+
+    if (isEmpty()) {
+        std::cerr << "Cannot set num cycles ahead of empty instruction." << std::endl;
+        return;
+    }
+
+    curr_instruction->setNumCyclesAhead(dep, newNumCyclesAhead);
+
+}
+
+int PipelineStage::getNumCyclesAhead(DEPENDENCY_TYPE dep) const {
+
+    if (isEmpty()) {
+        std::cerr << "Cannot get num cycles ahead of empty instruction." << std::endl;
+        return -1;
+    }
+
+    return curr_instruction->getNumCyclesAhead(dep);
+
+}
+
+
+
 INST_TYPE PipelineStage::getInstructionType() {
     if (!isEmpty()) { return curr_instruction->getInstType(); }
     std::cerr << "Trying to get type of empty instruction" << std::endl;
@@ -248,5 +272,28 @@ std::string PipelineStage::getNewStyleIstring() const {
     } 
 
     return "NOP\n";
+
+}
+
+bool PipelineStage::getAlreadyCompleted() const {
+
+    if (isEmpty()) {
+        std::cerr << "Empty instruction cannot be already completed" << std::endl;
+        return false;
+    }
+
+    return alreadyCompleted;
+
+}
+
+void PipelineStage::setAlreadyCompleted(bool newCompleted) {
+
+    if (isEmpty()) {
+        std::cerr << "Empty instruction cannot be set already completed" << std::endl;
+        return;
+    }
+
+    alreadyCompleted = newCompleted;
+
 
 }

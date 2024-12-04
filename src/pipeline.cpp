@@ -14,7 +14,7 @@ Pipeline::Pipeline() {
 
     // Initialize the 32 integer registers
     for (int i = 0; i < 32; ++i) {
-        integer_registers["R" + std::to_string(i)] = 0;
+        setIntegerRegister(i, 0);
     }
 
     // Initialize data memory
@@ -73,14 +73,15 @@ void Pipeline::comprehensiveAdvance() {
         pipeline_registers.npc = pc + 4;
     }
 
+    forwarding.resetPathsOutput();
     handleStalledState();
 
     advanceInstruction(WB, WB, true);
     advanceInstruction(DS, WB);
     advanceInstruction(DF, DS);
     advanceInstruction(EX, DF);
-    advanceInstruction(RF, EX);
-    if (!flags.isRAWStalled) { advanceInstruction(ID, RF); }
+    if (!flags.isRAWStalled || flags.stopStage != RF) { advanceInstruction(RF, EX); }
+    if (!flags.isRAWStalled || flags.stopStage != ID) { advanceInstruction(ID, RF); }
     advanceInstruction(IS, ID);
     advanceInstruction(IF, IS);
 
@@ -89,16 +90,17 @@ void Pipeline::comprehensiveAdvance() {
     }
 
     // Perform pipeline actions
-    ISAction();
-    instructionDecode();
-    registerFetch();
-    executeInstruction();
-    dataStore();
+
+
+
+
     writeBack();
-
-
-   
-
+    dataStore();
+    dataFetch();
+    executeInstruction();
+    registerFetch();
+    instructionDecode();
+    ISAction();
 
     curr_cycle++;
 
@@ -208,6 +210,7 @@ void Pipeline::instructionDecode() {
      */
 
     //Check type of instruction in ID state
+
 
     if (stages[StageType::ID].isEmpty()) {
         std::cerr << "Cannot decode empty instruction." << std::endl;
@@ -348,9 +351,12 @@ StageType Pipeline::checkRAWHazard(DEPENDENCY_TYPE reg, uint32_t register_depend
             case XOR:
             case ADDI:
             case SLTI:
-            case LW:
                 result_register = pipelineStage.getDestination();
                 if (register_dependency == result_register) { return stageType; } // A dependency exists
+                break;
+            case LW: //Need a stall to manage this
+                if (stageType == EX) { setRAWStall(2, RF); }
+                if (stageType == RF) { setRAWStall(2, ID); }
                 break;
             
             // 2. Since JAL and JALR write in EX, they can only cause a hazard in EX
@@ -377,10 +383,14 @@ void Pipeline::addDetectedForward(StageType to, StageType from, DEPENDENCY_TYPE 
     Instruction to_instruction = stages[to].getInstructionCopy();
 
     stages[to].setNeedsForward(true);
+    //stages[from].setNeedsToForward(true);
 
-    forwarding.addForward(from_instruction, to_instruction, 1); // FIX FIX !!
+    // How far ahead is it? FIX FIX edit with stalls LD
+    int num_cycles_ahead = static_cast<int>(from) - static_cast<int>(to);
+    stages[to].setNumCyclesAhead(dep, num_cycles_ahead);
 
-    
+    forwarding.addForward(from_instruction, to_instruction, num_cycles_ahead); // FIX FIX !!
+
 
 }
 
@@ -393,6 +403,9 @@ void Pipeline::cancelInstruction(StageType stage) {
      */
     if (flags.isBranchStalled) { stages[stage].setState("**STALL**"); }
     stages[stage].deallocateInstruction();
+    stages[stage].setNeedsForward(false);
+    stages[stage].setNumCyclesAhead(RS1, -1);
+    stages[stage].setNumCyclesAhead(RS2, -1);
 }
 
 
@@ -407,7 +420,11 @@ void Pipeline::registerFetch() {
         return;
     }
 
+    if (stages[StageType::RF].getAlreadyCompleted()) { return; }
+
     INST_TYPE instruction_type = stages[StageType::RF].getInstructionType();
+
+    if (flags.isRAWStalled) { stages[StageType::RF].setAlreadyCompleted(true); }
 
     switch (instruction_type) {
         case JAL:
@@ -424,6 +441,8 @@ void Pipeline::registerFetch() {
             return;
 
     }
+
+   
 
 
 
@@ -447,13 +466,15 @@ void Pipeline::registerFetchJType() {
         case J:
             return;
         case JALR_E:
-            // Fetches value in RS1 and sets memory address to return to accordingly
-            mem_address_value = integer_registers["R" + std::to_string(dependencies[RS1])];
+            // Fetches value in RS1 and sets memory address to return to accordingl
+            
+            mem_address_value = getIntegerRegister(dependencies[RS1]);
             stages[StageType::RF].setRegisterValue(RS1, mem_address_value);
+
             return;
         case RET:
             // Sets return address to value in R1
-            mem_address_value = integer_registers["R1"];
+            mem_address_value = getIntegerRegister(1);
             stages[StageType::RF].setRegisterValue(RS1, mem_address_value);
             return;
         default:
@@ -471,23 +492,26 @@ void Pipeline::registerFetchLoadStore() {
     EXACT_INSTRUCTION instruction = stages[StageType::RF].getExactInstruction();
     std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::RF].getDependencies();
 
-    int32_t mem_address_value;
+    //dependencies[RS1] = getForwardedValue(RF, RS1);
+    //dependencies[RS2] = getForwardedValue(RF, RS2);
+
+    uint32_t mem_address_value;
     int32_t value_to_store;
 
     switch(instruction) {
 
         case LW:
             // Gets just RS1 (address to load from)
-            mem_address_value = integer_registers["R" + std::to_string(dependencies[RS1])];
+            mem_address_value = getIntegerRegister(dependencies[RS1]);
             stages[StageType::RF].setRegisterValue(RS1, mem_address_value);
             return;
 
         case SW:
             // Gets RS1 (address to store to) and RS2 (value to store)
-            mem_address_value = integer_registers["R" + std::to_string(dependencies[RS1])];
+            mem_address_value = getIntegerRegister(dependencies[RS1]);
             stages[StageType::RF].setRegisterValue(RS1, mem_address_value);
 
-            value_to_store = integer_registers["R" + std::to_string(dependencies[RS2])];
+            value_to_store = getIntegerRegister(dependencies[RS2]);
             stages[StageType::RF].setRegisterValue(RS2, value_to_store);
             return;
         
@@ -520,8 +544,8 @@ void Pipeline::registerFetchRType() {
     std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::RF].getDependencies();
 
     // Fetch sources from integer register
-    int32_t source_1 = integer_registers["R" + std::to_string(dependencies[RS1])];
-    int32_t source_2 = integer_registers["R" + std::to_string(dependencies[RS2])];
+    int32_t source_1 = getIntegerRegister(dependencies[RS1]);
+    int32_t source_2 = getIntegerRegister(dependencies[RS2]);
 
     // Save values
     stages[StageType::RF].setRegisterValue(RS1, source_1);
@@ -549,7 +573,7 @@ void Pipeline::registerFetchIRR() {
     std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::RF].getDependencies();
 
     // RS1 is fetched as the source for the operation
-    int32_t source_1 = integer_registers["R" + std::to_string(dependencies[RS1])];
+    int32_t source_1 = getIntegerRegister(dependencies[RS1]);
 
     stages[StageType::RF].setRegisterValue(RS1, source_1);
 
@@ -576,8 +600,8 @@ void Pipeline::registerFetchBranch() {
     std::unordered_map<DEPENDENCY_TYPE, uint32_t> dependencies = stages[StageType::RF].getDependencies();
 
     // Fetch sources from integer register
-    int32_t source_1 = integer_registers["R" + std::to_string(dependencies[RS1])];
-    int32_t source_2 = integer_registers["R" + std::to_string(dependencies[RS2])];
+    int32_t source_1 = getIntegerRegister(dependencies[RS1]);
+    int32_t source_2 =getIntegerRegister(dependencies[RS2]);
 
     // Save values
     stages[StageType::RF].setRegisterValue(RS1, source_1);
@@ -642,6 +666,41 @@ void Pipeline::executeInstruction() {
 
 }
 
+void Pipeline::dataFetch() {
+
+    if (stages[StageType::DF].isEmpty()) {
+        std::cerr << "Cannot store data when no instruction in DF." << std::endl;
+        return;
+    }
+
+    EXACT_INSTRUCTION instruction_type = stages[StageType::DF].getExactInstruction();
+
+    if (instruction_type != SW && instruction_type != LW) { return; } // Only LW and SW
+
+    if (instruction_type == SW) {
+
+    
+        int32_t newResult = getForwardedValue(DF, RS2); // sees if there is a new result available from forwarding
+        stages[StageType::DF].setRegisterValue(RS2, newResult);
+
+        
+
+        uint32_t newMemAddress = getForwardedValue(DF, RS1);
+        stages[StageType::DF].setMemAddress(newMemAddress + stages[StageType::EX].getImmediate());
+
+        //std::cout << "Mem Address (DF): " << std::to_string(stages[StageType::DF].getMemAddress()) << std::endl;
+        std::cout << "Result (DF): " << std::to_string(stages[StageType::DF].getRegisterValues()[RS2]) << std::endl;
+        //std::cout << "\n\n";
+
+        return;
+    }
+
+    if (instruction_type == LW) {
+        return; // FIX FIX FIX
+    }
+
+}
+
 void Pipeline::dataStore() {
 
     if (stages[StageType::DS].isEmpty()) {
@@ -656,8 +715,14 @@ void Pipeline::dataStore() {
 
     if (instruction_type == SW) {
 
+        //stages[StageType::DS].setResult(getForwardedValue(DS, RS2));
+
+        //std::cout << "Mem Address (DS): " << std::to_string(stages[StageType::DS].getMemAddress()) << std::endl;
+        //std::cout << "Result (DS): " << std::to_string(stages[StageType::DS].getResult()) << std::endl;
+
+
         setDataMemory(stages[StageType::DS].getMemAddress()
-                    ,stages[StageType::DS].getResult());
+                    ,stages[StageType::DS].getRegisterValues()[RS2]);
         return;
     }
 
@@ -689,8 +754,7 @@ void Pipeline::writeBack() {
         case IRR:
         case LOAD:
             destination = stages[StageType::WB].getDestination();
-            destination_register = "R" + std::to_string(destination);
-            integer_registers[destination_register] = stages[StageType::WB].getResult();
+            setIntegerRegister(destination, stages[StageType::WB].getResult());
         default:
             return;
     }
@@ -705,8 +769,23 @@ void Pipeline::handleStalledState() {
     // Cancel stall if no stall remaining
     if (flags.RAWstallsRemaining == 0) {
         flags.isRAWStalled = false;
+        flags.stopStage = NONE;
+        stages[StageType::RF].setAlreadyCompleted(false);
     } else {
         flags.RAWstallsRemaining -= 1;
+        stats.total_loads++;
+
+        if (stages[flags.stopStage].getNeedsForward()) { // Make sure to preserve the distance with ID's other dependencies
+
+            if (stages[flags.stopStage].getNumCyclesAhead(RS1) != -1) {
+                stages[flags.stopStage].setNumCyclesAhead(RS1, stages[StageType::ID].getNumCyclesAhead(RS1) + 1);
+            }
+
+            if (stages[flags.stopStage].getNumCyclesAhead(RS2) != -1) {
+                stages[flags.stopStage].setNumCyclesAhead(RS2, stages[StageType::ID].getNumCyclesAhead(RS2) + 1);
+            }
+
+        }
     }
 
     if (flags.branchStallsRemaining == 0) {
@@ -722,6 +801,14 @@ void Pipeline::handleStalledState() {
     return;
 }
 
+void Pipeline::setRAWStall(int numCycles, StageType stopStage) {
+    /**
+     * The stage "stopStage" will not move forward
+     */
+    flags.RAWstallsRemaining = numCycles;
+    flags.isRAWStalled = true;
+    flags.stopStage = stopStage;
+}
 
 
 
@@ -731,6 +818,8 @@ void Pipeline::executeIRR() {
 
     // Gets dependencies, destination, and immediate of instruction in EX stage
     std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
+
+    register_values[RS1] = getForwardedValue(EX, RS1);
 
     int32_t immediate = stages[StageType::EX].getImmediate();
 
@@ -760,6 +849,8 @@ void Pipeline::executeRType() {
 
     // Get dependencies and destination
     std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
+    register_values[RS1] = getForwardedValue(EX, RS1);
+    register_values[RS2] = getForwardedValue(EX, RS2);
 
     // Gets the exact instruction we need to compute
     EXACT_INSTRUCTION inst = stages[StageType::EX].getExactInstruction();
@@ -808,6 +899,7 @@ void Pipeline::executeLoad() {
     int32_t offset = stages[StageType::EX].getImmediate();
     uint32_t destination = stages[StageType::EX].getDestination();
     std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
+    register_values[RS1] = getForwardedValue(EX, RS1);
     
     // Does string manip to get everything into useable form
     std::string destination_register = "R" + std::to_string(destination);
@@ -838,18 +930,19 @@ void Pipeline::executeStore() {
 
     // Get offset, destination (base register), and dependencies (source register rs2)
     int32_t offset = stages[StageType::EX].getImmediate();
-    uint32_t base_register_index = stages[StageType::EX].getDestination(); // rs1 (base register)
+    std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
+    
+    uint32_t base_address = register_values[RS1];
+    base_address = getForwardedValue(EX, RS1);
 
-    // Convert base register (rs1) and source register (rs2) to strings
-    std::string base_register = "R" + std::to_string(base_register_index); // e.g., "R3"
-
-    // Calculate the effective memory address
-    uint32_t base_address = integer_registers[base_register];
     uint32_t memory_address = base_address + offset;
-
-    // Retrieve the value from the source register (rs2)
-
     stages[StageType::EX].setMemAddress(memory_address);
+
+    if (stages[StageType::EX].getNumCyclesAhead(RS2) == 3) {
+        int32_t result = getForwardedValue(EX, RS2);
+        stages[StageType::EX].setRegisterValue(RS2, result);
+    }//Need to get WB if that value is needed
+
 
 }
 
@@ -861,16 +954,31 @@ void Pipeline::executeJType() {
 
     uint32_t base_address;
 
-    std::string destination_register = "R" + std::to_string(pc_place_addr);
 
     std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
+    register_values[RS1] = getForwardedValue(EX, RS1);
 
     // Gets the exact instruction we need to compute
     EXACT_INSTRUCTION inst = stages[StageType::EX].getExactInstruction();
 
     switch(inst) {
+        case J:
+            pc = 520;
+            flags.branchStallsRemaining = 8;
+            flags.isBranchStalled = true;
+
+            // Cancel all instructions prior to jump
+            cancelInstruction(IF);
+            cancelInstruction(IS);
+            cancelInstruction(ID);
+            cancelInstruction(RF);
+            sendNextInstruction();
+
+            return;
+
+
         case JAL_E:
-            integer_registers[destination_register] = pipeline_registers.npc;
+            setIntegerRegister(pc_place_addr, pipeline_registers.npc);
             pc += offset;
             pc -= 4; // to account for advancing at beginning of each cycle
 
@@ -887,7 +995,7 @@ void Pipeline::executeJType() {
             return;
         case JALR_E: //check this
             base_address = register_values[RS1];
-            integer_registers[destination_register] = pipeline_registers.npc;
+            setIntegerRegister(pc_place_addr, pipeline_registers.npc);
             pc = (base_address + offset) & ~1;
             pc -= 4; // to account for advancing at beginning of each cycle
 
@@ -901,6 +1009,8 @@ void Pipeline::executeJType() {
             cancelInstruction(RF);
 
             return;
+
+
         default:
             return;
     }
@@ -911,6 +1021,9 @@ void Pipeline::executeJType() {
 void Pipeline::executeBranch() {
     
     std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
+    register_values[RS1] = getForwardedValue(EX, RS1);
+    register_values[RS2] = getForwardedValue(EX, RS2);
+
     int32_t offset = stages[StageType::EX].getImmediate();
 
     uint32_t term1 = register_values[RS1];
@@ -943,6 +1056,7 @@ void Pipeline::executeBranch() {
     // If condition is not met, don't take the branch
     if (!takeBranch) { return; }
     
+    stats.total_branches++;
     pc += offset;
     pc -= 4; //to account for auto advancing
 
@@ -961,6 +1075,62 @@ void Pipeline::executeBranch() {
     
 
 
+}
+
+
+
+uint32_t Pipeline::getForwardedValue(StageType stage, DEPENDENCY_TYPE dep) {
+
+
+    /// UPDATE THIS SO IT DOES GETREGISTERVALUES FOR SW
+    // FIX FIX FIX
+
+    bool needsForward = stages[stage].getNeedsForward();
+    EXACT_INSTRUCTION instruction_to = stages[stage].getExactInstruction();
+
+    if (!needsForward) { 
+        if (false) { return stages[stage].getDependencies()[dep]; }
+        //if (instruction_to != SW && instruction_to != LW)
+        else { return stages[stage].getRegisterValues()[dep]; }
+    } //just returns the proper value if it doesnt need forwarding
+
+    int num_cycles_ahead = stages[stage].getNumCyclesAhead(dep);
+
+    if (num_cycles_ahead == -1) { 
+        if (false) { return stages[stage].getDependencies()[dep]; }
+        else { return stages[stage].getRegisterValues()[dep]; }
+    } // if this dependency is fine just return proper value
+
+    StageType from = static_cast<StageType>(static_cast<int>(stage) + num_cycles_ahead);
+    uint32_t value = stages[from].getResult();
+
+
+    if (!isValidForward(from, stage)) {
+        if (false) { return stages[stage].getDependencies()[dep]; }
+        else { return stages[stage].getRegisterValues()[dep]; }
+    }
+
+
+    std::cout << "Forwarded " << value << " from " << stages[from].getStageName() << " to " << stages[stage].getStageName() << std::endl;
+    
+
+    
+    forwarding.completeForward(from, stage, stages[from].getInstructionCopy(), stages[stage].getInstructionCopy(), &stats);
+    stages[stage].setNumCyclesAhead(dep, -1); //make it so you cant forward again
+
+    return value;
+
+}
+
+bool Pipeline::isValidForward(StageType from, StageType to) {
+    if ((from == StageType::DF && to == StageType::EX) || 
+        (from == StageType::DS && to == StageType::DF) || 
+        (from == StageType::DS && to == StageType::EX) || 
+        (from == StageType::WB && to == StageType::DF) || 
+        (from == StageType::WB && to == StageType::EX)) {
+        return true;
+    }
+    return false;
 }
 
 
@@ -992,7 +1162,7 @@ int32_t Pipeline::getDataMemory(uint32_t address) {
         return data_memory[address];
     } else {
         // Address does not exist, throw an error
-        throw std::runtime_error("Memory access violation: Address " + std::to_string(address) + " is not valid in data memory.");
+        throw std::runtime_error(("Memory access violation (Cycle) " + std::to_string((curr_cycle - 1)) + ": Address " + std::to_string(address) + " is not valid in data memory."));
     }
 }
 
@@ -1064,7 +1234,7 @@ std::string Pipeline::getIntegerRegistersOutput() {
 
     // Iterate over register indices from 0 to 31
     for (int i = 0; i < 32; ++i) {
-        output += "R" + std::to_string(i) + "\t" + std::to_string(integer_registers["R" + std::to_string(i)]) + "\t";
+        output += "R" + std::to_string(i) + "\t" + std::to_string(getIntegerRegister(i)) + "\t";
 
         // Add a newline after every 4 registers
         if ((i + 1) % 4 == 0) {
@@ -1166,4 +1336,31 @@ void Pipeline::addInstruction(Instruction instruction) {
 
     instructions.push_back(instruction);
     instruction_map[492 + (instructions.size() * 4)] = instruction;
+}
+
+void Pipeline::setIntegerRegister(uint32_t register_num, int32_t val) {
+
+    if (register_num > 31) { // Register number too large
+        std::cerr << "Cannot write to invalid register " << register_num << ".";
+        return;
+    }
+
+    //std::cerr << "Writing to integer_registers[" << ("R" + std::to_string(register_num)) << "]" << std::endl;
+
+    integer_registers["R" + std::to_string(register_num)] = val;
+
+    return;
+}
+
+int32_t Pipeline::getIntegerRegister(uint32_t register_num) {
+
+    if (register_num > 31) { // Register number too large
+        std::cerr << "Cannot read from invalid register " << register_num << ".";
+        exit(-1);
+    }
+
+    //std::cerr << "Reading from integer_registers[" << ("R" + std::to_string(register_num)) << "]" << std::endl;
+
+    return integer_registers.at(("R" + std::to_string(register_num)));
+
 }

@@ -66,6 +66,12 @@ public:
     bool getNeedsForward() const;
 
 
+
+    // Get and set num cycles ahead for forwarding
+    void setNumCyclesAhead(DEPENDENCY_TYPE dep, int newNumCyclesAhead);
+    int getNumCyclesAhead(DEPENDENCY_TYPE dep) const;
+
+
     // Get and set current state
     void setState(std::string updatedState);
     std::string getState() const;
@@ -79,6 +85,10 @@ public:
     std::string getInstructionString(); // Get instruction string
     std::string getNewStyleIstring() const;
 
+    // get and set already completed
+    bool getAlreadyCompleted() const;
+    void setAlreadyCompleted(bool newCompleted);
+
     
 
 private:
@@ -88,6 +98,8 @@ private:
     std::string state = "* " + getStageName() + " : NOP\n";
 
     std::string new_style_istring;
+
+    bool alreadyCompleted = false; // for when in a stall, something was already completed
 
 
 };

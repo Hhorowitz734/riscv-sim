@@ -44,6 +44,8 @@ struct Flags {
     bool isBranchStalled = false;
     int branchStallsRemaining = 0;
 
+    StageType stopStage; // Stage to stop at
+
     Flags() = default;
 
 };
@@ -55,12 +57,13 @@ struct Stats {
     int total_branches = 0;
     int other = 0;
 
-    // Total forwardings
-    int ex_df_to_rf_ex = 0;
-    int df_ds_to_ex_df = 0;
-    int df_ds_to_rf_ex = 0;
-    int ds_wb_to_ex_df = 0;
-    int ds_wb_to_rf_ex = 0;
+    std::unordered_map<std::string, int> num_forwards = {
+        {"EX/DF -> RF/EX", 0},
+        {"DF/DS -> EX/DF", 0},
+        {"DF/DS -> RF/EX", 0},
+        {"DS/WB -> EX/DF", 0},
+        {"DS/WB -> RF/EX", 0}
+    };
 
     Stats() = default;
 
@@ -73,16 +76,28 @@ struct Stats {
         output << "* Branches\t: " << total_branches << "\n";
         output << "* Other\t\t: " << other << "\n";
 
-        // Total Forwardings
         output << "\nTotal Forwardings:\n";
-        output << "* EX/DF -> RF/EX : " << ex_df_to_rf_ex << "\n";
-        output << "* DF/DS -> EX/DF : " << df_ds_to_ex_df << "\n";
-        output << "* DF/DS -> RF/EX : " << df_ds_to_rf_ex << "\n";
-        output << "* DS/WB -> EX/DF : " << ds_wb_to_ex_df << "\n";
-        output << "* DS/WB -> RF/EX : " << ds_wb_to_rf_ex << "\n";
+        for (const auto& forwarding : num_forwards) {
+            output << "* " << forwarding.first << " : " << forwarding.second << "\n";
+        }
 
         return output.str();
     }
+
+    void recordForwarding(std::string forward_type) {
+
+        auto it = num_forwards.find(forward_type);
+        if (it != num_forwards.end()) {
+            // If the entry exists, increment its value
+            it->second++;
+        } else {
+            // If the entry does not exist, return
+            return;
+        }
+
+    }
+
+
 };
 
 struct Forwarding {
@@ -97,7 +112,7 @@ struct Forwarding {
     bool getDetected() const {
         return detected;
     }
-    std::unordered_map<std::string, std::string> paths = {
+    std::unordered_map<std::string, std::string> paths_output = {
         {"EX/DF -> RF/EX", "(none)"},
         {"DF/DS -> EX/DF", "(none)"},
         {"DF/DS -> RF/EX", "(none)"},
@@ -105,7 +120,22 @@ struct Forwarding {
         {"DS/WB -> RF/EX", "(none)"}
     };
 
+    void resetPathsOutput() {
+        paths_output = {
+            {"EX/DF -> RF/EX", "(none)"},
+            {"DF/DS -> EX/DF", "(none)"},
+            {"DF/DS -> RF/EX", "(none)"},
+            {"DS/WB -> EX/DF", "(none)"},
+            {"DS/WB -> RF/EX", "(none)"}
+        };
+        pending_forwards = {};
+        detected = false;
+    }
+
+    std::unordered_map<StageType, StageType> paths;
+
     std::vector<std::pair<Instruction, Instruction>> pending_forwards;
+
     // and when to actually complete them
 
 
@@ -129,11 +159,11 @@ struct Forwarding {
 
         // Fixed order of paths
         output << " Forwarded:\n";
-        output << " * EX/DF -> RF/EX : " << paths.at("EX/DF -> RF/EX") << "\n";
-        output << " * DF/DS -> EX/DF : " << paths.at("DF/DS -> EX/DF") << "\n";
-        output << " * DF/DS -> RF/EX : " << paths.at("DF/DS -> RF/EX") << "\n";
-        output << " * DS/WB -> EX/DF : " << paths.at("DS/WB -> EX/DF") << "\n";
-        output << " * DS/WB -> RF/EX : " << paths.at("DS/WB -> RF/EX") << "\n";
+        output << " * EX/DF -> RF/EX : " << paths_output.at("EX/DF -> RF/EX") << "\n";
+        output << " * DF/DS -> EX/DF : " << paths_output.at("DF/DS -> EX/DF") << "\n";
+        output << " * DF/DS -> RF/EX : " << paths_output.at("DF/DS -> RF/EX") << "\n";
+        output << " * DS/WB -> EX/DF : " << paths_output.at("DS/WB -> EX/DF") << "\n";
+        output << " * DS/WB -> RF/EX : " << paths_output.at("DS/WB -> RF/EX") << "\n";
 
         return output.str();
     }
@@ -147,6 +177,47 @@ struct Forwarding {
         // FIX FIX ?NOTE NOTE
         
 
+    }
+
+    void completeForward(StageType from, StageType to, Instruction from_inst, Instruction to_inst, Stats* stats) {
+        paths[from] = to;
+
+        std::string updated_output = "(" + instruction_to_new_style_string(from_inst) + ") to ( " + instruction_to_new_style_string(to_inst) + ")";
+
+        if (from == DF && to == EX) {
+            paths_output["EX/DF -> RF/EX"] = updated_output;
+            stats->recordForwarding("EX/DF -> RF/EX");
+        }
+
+        else if (from == DS && to == DF) {
+            paths_output["DF/DS -> EX/DF"] = updated_output;
+            stats->recordForwarding("DF/DS -> EX/DF");
+        }
+
+        else if (from == DS && to == EX) {
+            paths_output["DF/DS -> RF/EX"] = updated_output;
+            stats->recordForwarding("DF/DS -> RF/EX");
+        }
+
+        else if (from == WB && to == DF) { 
+            paths_output["DS/WB -> EX/DF"] = updated_output;
+            stats->recordForwarding("DS/WB -> EX/DF");
+        }
+
+        else if (from == WB && to == EX) {
+            paths_output["DS/WB -> RF/EX"] = updated_output;
+            stats->recordForwarding("DS/WB -> RF/EX");
+        }
+
+        else {
+            std::cerr << "Should not be a forward here. Please check." << std::endl;
+            return;
+        }
+
+
+
+
+        return;
     }
 
 
@@ -194,10 +265,12 @@ public:
 
 
     void executeInstruction(); // Performs computation currently in EX stage
+    void dataFetch(); // Simulates DF stage
     void dataStore(); // Simulates DS stage
     void writeBack(); // Simulates WB stage
 
     void handleStalledState(); // Handles stalled state
+    void setRAWStall(int numCycles, StageType stopStage);
 
 
 
@@ -208,6 +281,9 @@ public:
     void executeStore();
     void executeJType();
     void executeBranch();
+
+    uint32_t getForwardedValue(StageType stage, DEPENDENCY_TYPE dep);
+    bool isValidForward(StageType from, StageType to);
 
     // Memory access helper functions
     bool setDataMemory(uint32_t address, int32_t data);
@@ -226,6 +302,10 @@ public:
 
     // Consuming from lexer
     void addInstruction(Instruction instruction);
+
+    // Methods for interacting with integer registers
+    void setIntegerRegister(uint32_t register_num, int32_t val);
+    int32_t getIntegerRegister(uint32_t register_num);
 
 
 

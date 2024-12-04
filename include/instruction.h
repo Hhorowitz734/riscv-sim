@@ -96,10 +96,32 @@ struct Instruction {
      * Flag that the instruction needs forwarding.
      */
     bool needsForward = false;
+    bool needsToForward = false;
+    //int numCyclesAhead = 0; // How many cycles ahead is the instruction you're forwarding from?
     void setForwardFlag(bool newFlag) {
         needsForward = newFlag;
     }
-    bool getForwardFlag() const { return needsForward; } 
+    bool getForwardFlag() const { return needsForward; }
+
+    void setNeedsToForwardFlag(bool newFlag) { needsToForward = newFlag; }
+    bool getNeedsToForwardFlag() const { return needsToForward; }
+
+    std::unordered_map<DEPENDENCY_TYPE, int> forward_from; // Stores how many cycles ahead to forward each dependency from 
+
+    void setNumCyclesAhead(DEPENDENCY_TYPE dep, int newNumCyclesAhead) {
+        forward_from[dep] = newNumCyclesAhead;
+    }
+    
+    int getNumCyclesAhead(DEPENDENCY_TYPE dep) const { 
+        auto it = forward_from.find(dep); // Look for the key in the map
+        if (it != forward_from.end()) {
+            return it->second; // Key found, return the associated value
+        }
+        return -1; // Key not found, return -1
+    }
+
+
+
     
 
         
