@@ -44,7 +44,7 @@ struct Flags {
     bool isBranchStalled = false;
     int branchStallsRemaining = 0;
 
-    StageType stopStage; // Stage to stop at
+    StageType stopStage = NONE; // Stage to stop at
 
     Flags() = default;
 

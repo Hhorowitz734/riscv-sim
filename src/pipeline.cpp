@@ -36,11 +36,14 @@ bool Pipeline::sendNextInstruction() {
      * Sends it to IF pipeline stage
      */
 
+    
+
     auto it = instruction_map.find(pc); // Check if the key exists in the map
     if (it != instruction_map.end()) { // Key exists
         if (stages[StageType::IF].isEmpty()) {
             stages[StageType::IF].setInstruction(std::make_unique<Instruction>(it->second));
-            return true;
+            std::cout << "Sent out instruction: " << stages[StageType::IF].getNewStyleIstring() << std::endl << "Cycle: " << std::to_string(curr_cycle) << std::endl;
+            return true; 
         } else {
             std::cerr << "Error: IF stage is full.\n";
             return true;
@@ -80,8 +83,8 @@ void Pipeline::comprehensiveAdvance() {
     advanceInstruction(DS, WB);
     advanceInstruction(DF, DS);
     advanceInstruction(EX, DF);
-    if (!flags.isRAWStalled || flags.stopStage != RF) { advanceInstruction(RF, EX); }
-    if (!flags.isRAWStalled || flags.stopStage != ID) { advanceInstruction(ID, RF); }
+    if (!flags.isRAWStalled || flags.stopStage == ID) { advanceInstruction(RF, EX); }
+    if (!flags.isRAWStalled || flags.stopStage == RF) { advanceInstruction(ID, RF); }
     advanceInstruction(IS, ID);
     advanceInstruction(IF, IS);
 
@@ -90,8 +93,6 @@ void Pipeline::comprehensiveAdvance() {
     }
 
     // Perform pipeline actions
-
-
 
 
     writeBack();
@@ -104,11 +105,15 @@ void Pipeline::comprehensiveAdvance() {
 
     curr_cycle++;
 
-    if (endFlag) { 
+    if (endFlag || curr_cycle == 127) { 
         std::cout << getCycleOutput();
         std::cout << "Program ended in comprehensiveAdvance()" << std::endl;
         exit(0); 
     }
+
+    std::cout << "Instruction in IF: " << stages[StageType::IF].getNewStyleIstring() << std::endl;
+    std::cout << "Instruction in IS: " << stages[StageType::IS].getNewStyleIstring() << std::endl;
+    std::cout << "Instruction in ID: " << stages[StageType::ID].getNewStyleIstring() << std::endl;
     
 }
 
@@ -217,7 +222,8 @@ void Pipeline::instructionDecode() {
         return;
     }
 
-    if (flags.isRAWStalled) { return; } // No need to check again
+    if (flags.isRAWStalled && curr_cycle != 16 && ((curr_cycle - 1) % 15 != 0)) { return; } // No need to check again
+    // This is sketch
 
     EXACT_INSTRUCTION instruction = stages[StageType::ID].getExactInstruction();
 
@@ -355,8 +361,15 @@ StageType Pipeline::checkRAWHazard(DEPENDENCY_TYPE reg, uint32_t register_depend
                 if (register_dependency == result_register) { return stageType; } // A dependency exists
                 break;
             case LW: //Need a stall to manage this
-                if (stageType == EX) { setRAWStall(2, RF); }
-                if (stageType == RF) { setRAWStall(2, ID); }
+                result_register = pipelineStage.getDestination();  /// aaa
+                if (stageType == EX) { 
+                    setRAWStall(2, RF);
+                    break;
+                     }
+                if (stageType == RF) { setRAWStall(2, ID);
+                break; }
+                if (register_dependency != result_register) {break;}
+                return stageType;
                 break;
             
             // 2. Since JAL and JALR write in EX, they can only cause a hazard in EX
@@ -430,6 +443,8 @@ void Pipeline::registerFetch() {
         case JAL:
         case JALR:
             return registerFetchJType();
+        case IRR:
+            return registerFetchRType();
         case I_TYPE:
             return registerFetchIRR();
         case BRANCH:
@@ -503,7 +518,9 @@ void Pipeline::registerFetchLoadStore() {
         case LW:
             // Gets just RS1 (address to load from)
             mem_address_value = getIntegerRegister(dependencies[RS1]);
+            std::cout << "LW RS1: " << std::to_string(dependencies[RS1]) << std::endl;
             stages[StageType::RF].setRegisterValue(RS1, mem_address_value);
+            std::cout << "Fetched: " << std::to_string(mem_address_value) << std::endl;
             return;
 
         case SW:
@@ -689,7 +706,7 @@ void Pipeline::dataFetch() {
         stages[StageType::DF].setMemAddress(newMemAddress + stages[StageType::EX].getImmediate());
 
         //std::cout << "Mem Address (DF): " << std::to_string(stages[StageType::DF].getMemAddress()) << std::endl;
-        std::cout << "Result (DF): " << std::to_string(stages[StageType::DF].getRegisterValues()[RS2]) << std::endl;
+        //std::cout << "Result (DF): " << std::to_string(stages[StageType::DF].getRegisterValues()[RS2]) << std::endl;
         //std::cout << "\n\n";
 
         return;
@@ -728,6 +745,7 @@ void Pipeline::dataStore() {
 
     //LOAD -> set result as retrieved data
     int32_t retrieved_data = getDataMemory(stages[StageType::DS].getMemAddress());
+    std::cout << "LD MEM ADDRESS: " <<std::to_string(stages[StageType::DS].getMemAddress()) << std::endl;
     stages[StageType::DS].setResult(retrieved_data);
 
     return; 
@@ -763,15 +781,25 @@ void Pipeline::writeBack() {
 
 void Pipeline::handleStalledState() {
 
+    
+
     // Just return out if not stalled
     if (!flags.isRAWStalled && !flags.isBranchStalled) { return; }
 
+    /** 
+    std::cout << std::endl << "Handling stall at cycle: " << std::to_string(curr_cycle) << std::endl;
+    std::cout << "Instruction in IF: " << stages[StageType::IF].getNewStyleIstring() << std::endl;
+    std::cout << "Instruction in IS: " << stages[StageType::IS].getNewStyleIstring() << std::endl;
+    std::cout << "Instruction in ID: " << stages[StageType::ID].getNewStyleIstring() << std::endl;
+    std::cout << "\n\n";
+    */
+
     // Cancel stall if no stall remaining
-    if (flags.RAWstallsRemaining == 0) {
+    if (flags.RAWstallsRemaining == 0 && flags.isRAWStalled) {
         flags.isRAWStalled = false;
         flags.stopStage = NONE;
         stages[StageType::RF].setAlreadyCompleted(false);
-    } else {
+    } else if (flags.isRAWStalled) {
         flags.RAWstallsRemaining -= 1;
         stats.total_loads++;
 
@@ -788,9 +816,14 @@ void Pipeline::handleStalledState() {
         }
     }
 
-    if (flags.branchStallsRemaining == 0) {
+    if (flags.branchStallsRemaining == 0 && flags.isBranchStalled) {
         flags.isBranchStalled = false;
-    } else {
+        stages[StageType::ID].setAlreadyCompleted(false);
+        stages[StageType::IF].setAlreadyCompleted(false);
+        stages[StageType::IS].setAlreadyCompleted(false);
+        stages[StageType::RF].setAlreadyCompleted(false);
+        stages[StageType::EX].setAlreadyCompleted(false);
+    } else if (flags.isBranchStalled) {
         flags.branchStallsRemaining -= 1;
     }
 
@@ -808,6 +841,15 @@ void Pipeline::setRAWStall(int numCycles, StageType stopStage) {
     flags.RAWstallsRemaining = numCycles;
     flags.isRAWStalled = true;
     flags.stopStage = stopStage;
+    pc += 4;
+
+    /*
+    std::cout << std::endl << "Executed a raw stall at cycle: " << std::to_string(curr_cycle) << std::endl;
+    std::cout << "Instruction in IF: " << stages[StageType::IF].getNewStyleIstring() << std::endl;
+    std::cout << "Instruction in IS: " << stages[StageType::IS].getNewStyleIstring() << std::endl;
+    std::cout << "Instruction in ID: " << stages[StageType::ID].getNewStyleIstring() << std::endl;
+    std::cout << "\n\n";
+    */
 }
 
 
@@ -849,9 +891,10 @@ void Pipeline::executeRType() {
 
     // Get dependencies and destination
     std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
+    std::cout << "RS1: " << std::to_string(register_values[RS1]) << std::endl << "RS2: " << std::to_string(register_values[RS2]) << std::endl;
     register_values[RS1] = getForwardedValue(EX, RS1);
     register_values[RS2] = getForwardedValue(EX, RS2);
-
+    std::cout << "RS1: " << std::to_string(register_values[RS1]) << std::endl << "RS2: " << std::to_string(register_values[RS2]) << std::endl;
     // Gets the exact instruction we need to compute
     EXACT_INSTRUCTION inst = stages[StageType::EX].getExactInstruction();
 
@@ -900,6 +943,8 @@ void Pipeline::executeLoad() {
     uint32_t destination = stages[StageType::EX].getDestination();
     std::unordered_map<DEPENDENCY_TYPE, int32_t> register_values = stages[StageType::EX].getRegisterValues();
     register_values[RS1] = getForwardedValue(EX, RS1);
+
+    std::cout << "Forwarded value: " << std::to_string(register_values[RS1]) << std::endl;
     
     // Does string manip to get everything into useable form
     std::string destination_register = "R" + std::to_string(destination);
